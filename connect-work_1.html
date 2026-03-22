@@ -1,0 +1,2168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect Work - Local Service Platform</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .leaflet-pane { z-index: 0 !important; }
+    .leaflet-control-container .leaflet-top,
+    .leaflet-control-container .leaflet-bottom { z-index: 1000 !important; }
+    @keyframes fade-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fade-in-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+    .animate-fade-in { animation: fade-in 0.3s ease forwards; }
+    .animate-fade-in-up { animation: fade-in-up 0.35s ease forwards; }
+    .animate-shake { animation: shake 0.3s ease; }
+    .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .custom-scrollbar::-webkit-scrollbar { width:4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background:#e2e8f0; border-radius:4px; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@19.1.0",
+      "react-dom/client": "https://esm.sh/react-dom@19.1.0/client",
+      "react/jsx-runtime": "https://esm.sh/react@19.1.0/jsx-runtime",
+      "firebase/app": "https://esm.sh/firebase@11.10.0/app",
+      "firebase/auth": "https://esm.sh/firebase@11.10.0/auth",
+      "firebase/firestore": "https://esm.sh/firebase@11.10.0/firestore",
+      "leaflet": "https://esm.sh/leaflet@1.9.4",
+      "@google/genai": "https://esm.sh/@google/genai@1.4.0",
+      "lucide-react": "https://esm.sh/lucide-react@0.469.0"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+import { initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, collection, query, where, orderBy, addDoc, deleteDoc, runTransaction, onSnapshot } from 'firebase/firestore';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
+import L from 'leaflet';
+import { GoogleGenAI } from '@google/genai';
+import { Loader2, LogOut, User as UserIcon, Briefcase, ShieldCheck, Send, X, MapPin, Navigation, Check, Mail, Lock, User, Phone, ArrowRight, Chrome, Facebook, Key, ArrowLeft, CheckCircle, Sprout, GraduationCap, Wand2, MessageCircle, Clock, Map as MapIcon, ChevronDown, ChevronUp, History, Filter, Search, Droplets, Zap, Wrench, Hammer, Paintbrush, BrickWall, Sparkles, Car, HardHat, Star, BadgeCheck, MessageSquare, Tractor, Volume2, QrCode, Banknote, CreditCard, Wallet, Plus, AlertCircle, Calendar, RefreshCw, Languages, Bell, BellRing, BellOff, AlertTriangle, ArrowUpRight, Shield, Hammer as HammerIcon, ExternalLink, Save, Camera, Landmark, Trash2 } from 'lucide-react';
+
+// ============================================================
+// FIREBASE CONFIG
+// ============================================================
+const firebaseConfig = {
+  projectId: "gen-lang-client-0276265074",
+  appId: "1:341210276203:web:5b693127728f0dbf422c2e",
+  apiKey: "AIzaSyBM7XSmHQsK-wKaT-Oq7zrJdr5j2CVfLVk",
+  authDomain: "gen-lang-client-0276265074.firebaseapp.com",
+  firestoreDatabaseId: "ai-studio-f361d930-82a4-44a8-ab7a-46ca87f9a0bb",
+  storageBucket: "gen-lang-client-0276265074.firebasestorage.app",
+  messagingSenderId: "341210276203"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+const auth = getAuth(firebaseApp);
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const APP_NAME = "Connect Work";
+
+const WorkerCategory = {
+  AGRICULTURE: 'Agriculture',
+  PLUMBER: 'Plumber',
+  ELECTRICIAN: 'Electrician',
+  MECHANIC: 'Mechanic',
+  CARPENTER: 'Carpenter',
+  PAINTER: 'Painter',
+  MASON: 'Mason',
+  CLEANER: 'Cleaner',
+  DRIVER: 'Driver',
+  LABORER: 'Daily Wage Laborer',
+  OTHER: 'Other'
+};
+
+const CATEGORIES_LIST = Object.values(WorkerCategory);
+
+const AGRI_SUB_CATEGORIES = [
+  { id: 'land_prep', label: 'Land Work / Preparation', icon: '🚜' },
+  { id: 'sowing', label: 'Sowing & Seeding', icon: '🌱' },
+  { id: 'machinery', label: 'Farm Machinery Rental', icon: '⚙️' },
+  { id: 'drone', label: 'Pesticide Drone Services', icon: '🚁' },
+  { id: 'irrigation', label: 'Irrigation & Motor Work', icon: '💧' },
+  { id: 'harvest', label: 'Harvesting', icon: '🌾' },
+  { id: 'labor', label: 'General Farm Labor', icon: '👨‍🌾' },
+  { id: 'transport', label: 'Crop Transport', icon: '🚚' }
+];
+
+const MOCK_CITIES = ["Downtown","North Hills","Westside","Industrial Park","Suburbs","Green Valley Village","River Banks Farm Area"];
+
+const SUPPORTED_LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'hi', name: 'Hindi (हिंदी)' },
+  { code: 'te', name: 'Telugu (తెలుగు)' },
+  { code: 'ta', name: 'Tamil (தமிழ்)' },
+  { code: 'kn', name: 'Kannada (ಕನ್ನಡ)' },
+  { code: 'ml', name: 'Malayalam (മലയാളം)' },
+  { code: 'mr', name: 'Marathi (मराठी)' },
+  { code: 'bn', name: 'Bengali (বাংলা)' }
+];
+
+// ============================================================
+// API SERVICE (store.ts)
+// ============================================================
+function handleFirestoreError(error, operationType, path) {
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: { userId: auth.currentUser?.uid, email: auth.currentUser?.email },
+    operationType, path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+const api = {
+  login: async (email, password) => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      if (!userDoc.exists()) throw new Error("User profile not found");
+      return userDoc.data();
+    } catch (error) { handleFirestoreError(error, 'get', "users"); throw error; }
+  },
+  socialLogin: async (provider, email, name) => {
+    try {
+      const googleProvider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const userRef = doc(db, "users", userCredential.user.uid);
+      const userDoc = await getDoc(userRef);
+      if (!userDoc.exists()) {
+        const newUser = {
+          id: userCredential.user.uid,
+          name: userCredential.user.displayName || name || 'New User',
+          email: userCredential.user.email || email,
+          phone: '', location: '', language: 'en',
+          role: 'client', roleSelected: false, isVerified: true, walletBalance: 0
+        };
+        await setDoc(userRef, newUser);
+        await setDoc(doc(db, "public_profiles", newUser.id), { id: newUser.id, name: newUser.name, role: newUser.role, isVerified: newUser.isVerified });
+        return newUser;
+      }
+      return userDoc.data();
+    } catch (error) { handleFirestoreError(error, 'write', "users"); throw error; }
+  },
+  register: async (userData) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
+      const newUser = {
+        id: userCredential.user.uid, name: userData.name, email: userData.email,
+        phone: userData.phone || '', location: userData.location || '',
+        language: 'en', role: 'client', roleSelected: false,
+        isVerified: false, kycStatus: 'NOT_SUBMITTED', walletBalance: 0
+      };
+      await setDoc(doc(db, "users", newUser.id), newUser);
+      await setDoc(doc(db, "public_profiles", newUser.id), { id: newUser.id, name: newUser.name, role: newUser.role, isVerified: newUser.isVerified });
+      return newUser;
+    } catch (error) { handleFirestoreError(error, 'write', "users"); throw error; }
+  },
+  resetPasswordRequest: async (email) => {
+    try { await sendPasswordResetEmail(auth, email); return true; }
+    catch (error) { handleFirestoreError(error, 'write', "auth"); throw error; }
+  },
+  logout: async () => { await signOut(auth); },
+  updateUser: async (updates) => {
+    if (!auth.currentUser) throw new Error("Not logged in");
+    try {
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      await updateDoc(userRef, updates);
+      if (updates.name || updates.role || updates.isVerified !== undefined || updates.workerProfile) {
+        const publicProfileRef = doc(db, "public_profiles", auth.currentUser.uid);
+        const publicUpdates = {};
+        if (updates.name) publicUpdates.name = updates.name;
+        if (updates.role) publicUpdates.role = updates.role;
+        if (updates.isVerified !== undefined) publicUpdates.isVerified = updates.isVerified;
+        if (updates.workerProfile) publicUpdates.workerProfile = updates.workerProfile;
+        await updateDoc(publicProfileRef, publicUpdates).catch(e => console.error("Failed to update public profile", e));
+      }
+      const updatedDoc = await getDoc(userRef);
+      return updatedDoc.data();
+    } catch (error) { handleFirestoreError(error, 'update', "users"); throw error; }
+  },
+  updatePaymentDetails: async (details) => {
+    if (!auth.currentUser) throw new Error("Not logged in");
+    try {
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      const user = userDoc.data();
+      const newPaymentDetails = { ...user.paymentDetails, ...details };
+      const updates = { paymentDetails: newPaymentDetails };
+      if ((newPaymentDetails.upiId || newPaymentDetails.bankAccount) && user.kycStatus === 'NOT_SUBMITTED') {
+        updates.kycStatus = 'VERIFIED';
+      }
+      await updateDoc(userRef, updates);
+      const updatedDoc = await getDoc(userRef);
+      return updatedDoc.data();
+    } catch (error) { handleFirestoreError(error, 'update', "users"); throw error; }
+  },
+  withdrawFunds: async (amount) => {
+    if (!auth.currentUser) throw new Error("Not logged in");
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const userRef = doc(db, "users", auth.currentUser.uid);
+        const userDoc = await transaction.get(userRef);
+        const user = userDoc.data();
+        if ((user.walletBalance || 0) < amount) throw new Error("Insufficient funds");
+        if (!user.paymentDetails?.upiId && !user.paymentDetails?.bankAccount) throw new Error("No UPI ID or Bank Account linked");
+        const newBalance = (user.walletBalance || 0) - amount;
+        transaction.update(userRef, { walletBalance: newBalance });
+        const dest = user.paymentDetails?.upiId || `Bank Acc ending in ${user.paymentDetails?.bankAccount?.slice(-4)}`;
+        const notifRef = doc(collection(db, "notifications"));
+        transaction.set(notifRef, { id: notifRef.id, userId: user.id, message: `₹${amount} withdrawn to ${dest} successfully.`, type: 'success', read: false, timestamp: Date.now() });
+        return { ...user, walletBalance: newBalance };
+      });
+    } catch (error) { handleFirestoreError(error, 'write', "users/notifications"); throw error; }
+  },
+  addFunds: async (amount) => {
+    if (!auth.currentUser) throw new Error("Not logged in");
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const userRef = doc(db, "users", auth.currentUser.uid);
+        const userDoc = await transaction.get(userRef);
+        const user = userDoc.data();
+        const newBalance = (user.walletBalance || 0) + amount;
+        transaction.update(userRef, { walletBalance: newBalance });
+        const notifRef = doc(collection(db, "notifications"));
+        transaction.set(notifRef, { id: notifRef.id, userId: user.id, message: `₹${amount} added to your wallet successfully.`, type: 'success', read: false, timestamp: Date.now() });
+        return { ...user, walletBalance: newBalance };
+      });
+    } catch (error) { handleFirestoreError(error, 'write', "users/notifications"); throw error; }
+  },
+  postJob: async (jobData) => {
+    try {
+      const jobRef = doc(collection(db, "jobs"));
+      const newJob = { ...jobData, id: jobRef.id, postedAt: Date.now(), status: 'OPEN', paymentStatus: 'PENDING', statusHistory: [{ status: 'OPEN', timestamp: Date.now(), note: 'Job Posted' }], interestedWorkerIds: [], isRated: false };
+      await setDoc(jobRef, newJob);
+      return newJob;
+    } catch (error) { handleFirestoreError(error, 'create', "jobs"); throw error; }
+  },
+  getJobs: async (filter) => {
+    try {
+      const jobsRef = collection(db, "jobs");
+      let q = query(jobsRef, orderBy("postedAt", "desc"));
+      if (filter?.type === 'client') q = query(jobsRef, where("clientId", "==", filter.userId), orderBy("postedAt", "desc"));
+      const snapshot = await getDocs(q);
+      let jobs = snapshot.docs.map(d => d.data());
+      if (filter?.type === 'worker') {
+        const workerDoc = await getDoc(doc(db, "users", filter.userId));
+        const worker = workerDoc.data();
+        if (!worker) return [];
+        jobs = jobs.filter(j => {
+          if (j.assignedWorkerId === filter.userId) return true;
+          if (j.status !== 'OPEN') return false;
+          return worker.workerProfile?.categories.includes(j.category);
+        });
+      }
+      return jobs;
+    } catch (error) { handleFirestoreError(error, 'list', "jobs"); throw error; }
+  },
+  getJobById: async (jobId) => {
+    try {
+      const jobDoc = await getDoc(doc(db, "jobs", jobId));
+      return jobDoc.exists() ? jobDoc.data() : undefined;
+    } catch (error) { handleFirestoreError(error, 'get', "jobs"); throw error; }
+  },
+  expressInterest: async (jobId, workerId) => {
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const jobRef = doc(db, "jobs", jobId);
+        const jobDoc = await transaction.get(jobRef);
+        if (!jobDoc.exists()) throw new Error("Job not found");
+        const job = jobDoc.data();
+        if (!job.interestedWorkerIds.includes(workerId)) {
+          job.interestedWorkerIds.push(workerId);
+          transaction.update(jobRef, { interestedWorkerIds: job.interestedWorkerIds });
+        }
+        return job;
+      });
+    } catch (error) { handleFirestoreError(error, 'update', "jobs"); throw error; }
+  },
+  bookWorker: async (jobId, workerId, method = 'CASH') => {
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const jobRef = doc(db, "jobs", jobId);
+        const jobDoc = await transaction.get(jobRef);
+        if (!jobDoc.exists()) throw new Error("Job not found");
+        const job = jobDoc.data();
+        const workerRef = doc(db, "users", workerId);
+        const workerDoc = await transaction.get(workerRef);
+        if (!workerDoc.exists()) throw new Error("Worker not found");
+        const worker = workerDoc.data();
+        if (method === 'ONLINE') {
+          const clientRef = doc(db, "users", job.clientId);
+          const clientDoc = await transaction.get(clientRef);
+          const client = clientDoc.data();
+          if ((client.walletBalance || 0) < job.budget) throw new Error(`Insufficient wallet balance (₹${client.walletBalance}). Please add money or use Cash mode.`);
+          transaction.update(clientRef, { walletBalance: (client.walletBalance || 0) - job.budget });
+          job.paymentStatus = 'ESCROW_LOCKED';
+        } else { job.paymentStatus = 'PENDING'; }
+        job.assignedWorkerId = workerId;
+        job.assignedWorkerName = worker.name;
+        job.assignedWorkerPhone = worker.phone;
+        job.assignedWorkerVerified = worker.isVerified;
+        job.status = 'BOOKED';
+        job.paymentMethod = method;
+        job.completionCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+        job.statusHistory.push({ status: 'BOOKED', timestamp: Date.now(), note: `Worker assigned via ${method}. ${method === 'ONLINE' ? 'Funds locked in Escrow.' : 'Payment pending on completion.'}` });
+        transaction.update(jobRef, job);
+        return job;
+      });
+    } catch (error) { handleFirestoreError(error, 'write', "jobs/users"); throw error; }
+  },
+  completeJob: async (jobId) => {
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const jobRef = doc(db, "jobs", jobId);
+        const jobDoc = await transaction.get(jobRef);
+        if (!jobDoc.exists()) throw new Error("Job not found");
+        const job = jobDoc.data();
+        if (job.status !== 'BOOKED') throw new Error("Job is not in a booked state");
+        const isEscrow = job.paymentMethod === 'ONLINE' || job.paymentStatus === 'ESCROW_LOCKED';
+        const totalAmount = job.budget;
+        const commission = totalAmount * 0.20;
+        const workerPayout = totalAmount - commission;
+        const workerRef = doc(db, "users", job.assignedWorkerId);
+        const workerDoc = await transaction.get(workerRef);
+        const worker = workerDoc.data();
+        if (isEscrow) {
+          transaction.update(workerRef, { walletBalance: (worker.walletBalance || 0) + workerPayout });
+          const platformRef = doc(db, "platform", "data");
+          const platformDoc = await transaction.get(platformRef);
+          const currentRev = platformDoc.exists() ? platformDoc.data().revenue || 0 : 0;
+          transaction.set(platformRef, { revenue: currentRev + commission }, { merge: true });
+          job.paymentStatus = 'RELEASED';
+          const notifRef = doc(collection(db, "notifications"));
+          transaction.set(notifRef, { id: notifRef.id, userId: worker.id, message: `Work Approved! ₹${workerPayout} released to your wallet.`, type: 'payment', read: false, timestamp: Date.now() });
+        } else {
+          job.paymentStatus = 'RELEASED';
+          const notifRef = doc(collection(db, "notifications"));
+          transaction.set(notifRef, { id: notifRef.id, userId: worker.id, message: `Job Marked Complete. Please collect ₹${totalAmount} cash from client if not already done.`, type: 'info', read: false, timestamp: Date.now() });
+        }
+        job.status = 'COMPLETED';
+        job.statusHistory.push({ status: 'COMPLETED', timestamp: Date.now(), note: `Job completed. Payment ${isEscrow ? 'released from Escrow' : 'settled via Cash'}.` });
+        transaction.update(jobRef, job);
+        return { success: true, payout: isEscrow ? workerPayout : 0, method: job.paymentMethod };
+      });
+    } catch (error) { handleFirestoreError(error, 'write', "jobs/users"); throw error; }
+  },
+  verifyAndPayout: async (jobId, code) => {
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const jobRef = doc(db, "jobs", jobId);
+        const jobDoc = await transaction.get(jobRef);
+        if (!jobDoc.exists()) throw new Error("Job not found");
+        const job = jobDoc.data();
+        if (job.completionCode !== code) throw new Error("Invalid QR Code / Security Token");
+        if (job.status !== 'BOOKED') throw new Error("Job already completed or cancelled");
+        const isEscrow = job.paymentMethod === 'ONLINE' || job.paymentStatus === 'ESCROW_LOCKED';
+        const totalAmount = job.budget;
+        const commission = totalAmount * 0.20;
+        const workerPayout = totalAmount - commission;
+        const workerRef = doc(db, "users", job.assignedWorkerId);
+        const workerDoc = await transaction.get(workerRef);
+        const worker = workerDoc.data();
+        if (isEscrow) {
+          transaction.update(workerRef, { walletBalance: (worker.walletBalance || 0) + workerPayout });
+          const platformRef = doc(db, "platform", "data");
+          const platformDoc = await transaction.get(platformRef);
+          const currentRev = platformDoc.exists() ? platformDoc.data().revenue || 0 : 0;
+          transaction.set(platformRef, { revenue: currentRev + commission }, { merge: true });
+        }
+        job.paymentStatus = 'RELEASED';
+        job.status = 'COMPLETED';
+        job.statusHistory.push({ status: 'COMPLETED', timestamp: Date.now(), note: `Job verified via QR. Payment ${isEscrow ? 'released' : 'confirmed'}.` });
+        const notifRef = doc(collection(db, "notifications"));
+        transaction.set(notifRef, { id: notifRef.id, userId: worker.id, message: `QR Verified! Job Complete. ${isEscrow ? `₹${workerPayout} added to wallet.` : 'Collect cash from client.'}`, type: isEscrow ? 'payment' : 'success', read: false, timestamp: Date.now() });
+        transaction.update(jobRef, job);
+        return { success: true, payout: isEscrow ? workerPayout : 0, commission: isEscrow ? commission : 0 };
+      });
+    } catch (error) { handleFirestoreError(error, 'write', "jobs/users"); throw error; }
+  },
+  updateJobStatus: async (jobId, status) => {
+    try {
+      const jobRef = doc(db, "jobs", jobId);
+      const jobDoc = await getDoc(jobRef);
+      if (!jobDoc.exists()) throw new Error("Job not found");
+      const job = jobDoc.data();
+      job.status = status;
+      job.statusHistory.push({ status, timestamp: Date.now(), note: `Status updated to ${status}` });
+      await updateDoc(jobRef, { status: job.status, statusHistory: job.statusHistory });
+      return job;
+    } catch (error) { handleFirestoreError(error, 'update', "jobs"); throw error; }
+  },
+  rateWorker: async (jobId, rating) => {
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const jobRef = doc(db, "jobs", jobId);
+        const jobDoc = await transaction.get(jobRef);
+        if (!jobDoc.exists()) throw new Error("Job not found");
+        const job = jobDoc.data();
+        if (!job.assignedWorkerId) throw new Error("No worker assigned");
+        if (job.status !== 'COMPLETED') throw new Error("Job must be completed to rate");
+        const workerRef = doc(db, "users", job.assignedWorkerId);
+        const workerDoc = await transaction.get(workerRef);
+        const worker = workerDoc.data();
+        const ratingRef = doc(collection(db, "ratings"));
+        const newRating = { id: ratingRef.id, jobId: job.id, workerId: worker.id, clientId: job.clientId, stars: rating.stars, comment: rating.comment, timestamp: Date.now() };
+        transaction.set(ratingRef, newRating);
+        transaction.update(jobRef, { isRated: true });
+        const currentAvg = worker.workerProfile?.rating || 0;
+        const currentCount = worker.workerProfile?.ratingCount || 0;
+        const newCount = currentCount + 1;
+        const newAvg = ((currentAvg * currentCount) + rating.stars) / newCount;
+        transaction.update(workerRef, { "workerProfile.rating": parseFloat(newAvg.toFixed(1)), "workerProfile.ratingCount": newCount });
+        const publicProfileRef = doc(db, "public_profiles", worker.id);
+        transaction.update(publicProfileRef, { "workerProfile.rating": parseFloat(newAvg.toFixed(1)), "workerProfile.ratingCount": newCount });
+        return newRating;
+      });
+    } catch (error) { handleFirestoreError(error, 'write', "ratings/jobs/users"); throw error; }
+  },
+  getJobMessages: async (jobId) => {
+    try {
+      const q = query(collection(db, "messages"), where("jobId", "==", jobId), orderBy("timestamp", "asc"));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => d.data());
+    } catch (error) { handleFirestoreError(error, 'list', "messages"); throw error; }
+  },
+  sendMessage: async (jobId, senderId, text) => {
+    try {
+      const msgRef = doc(collection(db, "messages"));
+      const newMessage = { id: msgRef.id, jobId, senderId, text, timestamp: Date.now(), read: false };
+      await setDoc(msgRef, newMessage);
+      return newMessage;
+    } catch (error) { handleFirestoreError(error, 'create', "messages"); throw error; }
+  },
+  markMessagesAsRead: async (jobId, userId) => {
+    try {
+      const q = query(collection(db, "messages"), where("jobId", "==", jobId), where("read", "==", false));
+      const snapshot = await getDocs(q);
+      const promises = snapshot.docs.map(docSnapshot => {
+        const msg = docSnapshot.data();
+        if (msg.senderId !== userId) return updateDoc(docSnapshot.ref, { read: true });
+        return Promise.resolve();
+      });
+      await Promise.all(promises);
+    } catch (error) { handleFirestoreError(error, 'update', "messages"); throw error; }
+  },
+  getUnreadCounts: async (userId) => {
+    try {
+      const q = query(collection(db, "messages"), where("read", "==", false));
+      const snapshot = await getDocs(q);
+      const counts = {};
+      snapshot.docs.forEach(d => {
+        const msg = d.data();
+        if (msg.senderId !== userId) counts[msg.jobId] = (counts[msg.jobId] || 0) + 1;
+      });
+      return counts;
+    } catch (error) { handleFirestoreError(error, 'list', "messages"); throw error; }
+  },
+  getAllWorkers: async () => {
+    try {
+      const q = query(collection(db, "public_profiles"), where("role", "==", "worker"));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => d.data());
+    } catch (error) { handleFirestoreError(error, 'list', "public_profiles"); throw error; }
+  },
+  getAllClients: async () => {
+    try {
+      const q = query(collection(db, "public_profiles"), where("role", "==", "client"));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => d.data());
+    } catch (error) { handleFirestoreError(error, 'list', "public_profiles"); throw error; }
+  },
+  getWorkersByIds: async (ids) => {
+    if (!ids || ids.length === 0) return [];
+    try {
+      const chunks = [];
+      for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
+      const results = [];
+      for (const chunk of chunks) {
+        const q = query(collection(db, "public_profiles"), where("id", "in", chunk));
+        const snapshot = await getDocs(q);
+        results.push(...snapshot.docs.map(d => d.data()));
+      }
+      return results;
+    } catch (error) { handleFirestoreError(error, 'list', "public_profiles"); throw error; }
+  },
+  verifyUser: async (userId, isVerified) => {
+    try {
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, { isVerified });
+      const publicProfileRef = doc(db, "public_profiles", userId);
+      await updateDoc(publicProfileRef, { isVerified }).catch(e => console.error(e));
+      const updatedDoc = await getDoc(userRef);
+      return updatedDoc.data();
+    } catch (error) { handleFirestoreError(error, 'update', "users"); throw error; }
+  }
+};
+
+// ============================================================
+// GEMINI SERVICE
+// ============================================================
+const getAI = () => {
+  const apiKey = window._GEMINI_API_KEY || '';
+  if (!apiKey) throw new Error("API_KEY is not configured.");
+  return new GoogleGenAI({ apiKey });
+};
+
+const optimizeJobDescription = async (rawInput, category) => {
+  try {
+    const ai = getAI();
+    const prompt = `You are an assistant for a local service marketplace. A user wants to hire a ${category}. They typed: "${rawInput}". Rewrite this into a professional, clear, and concise job description (max 2 sentences) that a worker would understand. Do not add markdown. Just plain text.`;
+    const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+    return response.text?.trim() || rawInput;
+  } catch (error) { console.error("Gemini optimization failed:", error); return rawInput; }
+};
+
+const translateText = async (text, targetLangCode) => {
+  try {
+    const langObj = SUPPORTED_LANGUAGES.find(l => l.code === targetLangCode);
+    const targetLangName = langObj?.name;
+    if (!targetLangName && !targetLangCode) throw new Error("Target language not specified");
+    const effectiveTarget = targetLangName || targetLangCode;
+    const ai = getAI();
+    const prompt = `You are a helpful translator for a local job marketplace in India. Translate the following job description into ${effectiveTarget}. Rules: 1. Keep it simple, colloquial, and easy for a daily wage worker to understand. 2. Do NOT add explanations. 3. Return ONLY the translated text. Original Text: "${text}"`;
+    const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+    const result = response.text?.trim();
+    if (!result) throw new Error("Translation service returned empty result");
+    return result;
+  } catch (error) { console.error("Gemini translation failed:", error); return `Translation unavailable. Displaying original English text.`; }
+};
+
+const generateSpeech = async (text) => {
+  try {
+    const ai = getAI();
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text }] }],
+      config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } }
+    });
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+  } catch (error) { console.error("Gemini TTS failed:", error); return null; }
+};
+
+const playRawAudio = async (base64String) => {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+    const binaryString = atob(base64String);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    const dataInt16 = new Int16Array(bytes.buffer);
+    const frameCount = dataInt16.length;
+    const audioBuffer = audioContext.createBuffer(1, frameCount, 24000);
+    const channelData = audioBuffer.getChannelData(0);
+    for (let i = 0; i < frameCount; i++) channelData[i] = dataInt16[i] / 32768.0;
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.start();
+    return new Promise(resolve => { source.onended = () => { resolve(); audioContext.close(); }; });
+  } catch (error) { console.error("Error playing audio:", error); }
+};
+
+// ============================================================
+// APP CONTEXT
+// ============================================================
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+const AppContext = createContext(undefined);
+
+function AppProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentView, setView] = useState('dashboard');
+  const lastJobCheckRef = useRef(Date.now());
+  const lastMessageCheckRef = useRef(Date.now());
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const unsubscribeUser = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) setUser(docSnap.data());
+          else setUser(null);
+          setIsLoading(false);
+        }, (error) => { console.error("Error fetching user data:", error); setIsLoading(false); });
+        return () => unsubscribeUser();
+      } else {
+        setUser(null);
+        setIsLoading(false);
+      }
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let unsubscribeJobs;
+    if (user.role === 'worker') {
+      const jobsQuery = query(collection(db, 'jobs'), where('status', '==', 'OPEN'), orderBy('postedAt', 'desc'));
+      unsubscribeJobs = onSnapshot(jobsQuery, (snapshot) => {
+        const notificationsEnabled = user.notificationsEnabled ?? user.workerProfile?.notificationsEnabled ?? false;
+        if (!notificationsEnabled) return;
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const job = change.doc.data();
+            if (job.postedAt > lastJobCheckRef.current) {
+              lastJobCheckRef.current = Date.now();
+              const hasCategory = user.workerProfile?.categories.includes(job.category);
+              let hasLocation = false;
+              if (user.coords && job.coords) {
+                if (getDistanceKm(user.coords.lat, user.coords.lng, job.coords.lat, job.coords.lng) <= 30) hasLocation = true;
+              }
+              if (!hasLocation) {
+                const userLoc = user.location?.toLowerCase() || '';
+                const jobLoc = job.location?.toLowerCase() || '';
+                if (userLoc && jobLoc && (jobLoc.includes(userLoc) || userLoc.includes(jobLoc))) hasLocation = true;
+                if (!userLoc) hasLocation = true;
+              }
+              if (hasCategory && hasLocation) sendSystemNotification(`New ${job.category} Job Nearby!`, `${job.title} in ${job.location}`, 'job-alert');
+            }
+          }
+        });
+      });
+    }
+    const messagesQuery = query(collection(db, 'messages'), orderBy('timestamp', 'asc'));
+    const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
+      const notificationsEnabled = user.notificationsEnabled ?? user.workerProfile?.notificationsEnabled ?? false;
+      if (!notificationsEnabled) return;
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const msg = change.doc.data();
+          if (msg.timestamp > lastMessageCheckRef.current && msg.senderId !== user.id) {
+            lastMessageCheckRef.current = Date.now();
+            api.getJobById(msg.jobId).then(job => {
+              if (!job) return;
+              let isForMe = false; let title = 'New Message';
+              if (user.role === 'client' && job.clientId === user.id) { isForMe = true; title = `Message from ${job.assignedWorkerName || 'Worker'}`; }
+              else if (user.role === 'worker' && job.assignedWorkerId === user.id) { isForMe = true; title = `Message from ${job.clientName || 'Client'}`; }
+              if (isForMe) sendSystemNotification(title, msg.text, 'chat-alert');
+            });
+          }
+        }
+      });
+    });
+    return () => { if (unsubscribeJobs) unsubscribeJobs(); unsubscribeMessages(); };
+  }, [user]);
+
+  const sendSystemNotification = (title, body, soundType) => {
+    const audio = new Audio(soundType === 'job-alert' ? 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' : 'https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+    audio.play().catch(e => console.log("Audio play failed", e));
+    if (Notification.permission === 'granted') {
+      const notif = new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/3043/3043233.png', tag: Date.now().toString() });
+      notif.onclick = () => { window.focus(); notif.close(); };
+    }
+  };
+
+  const login = async (email, pass) => {
+    setIsLoading(true);
+    try { await api.login(email, pass); setView('dashboard'); lastJobCheckRef.current = Date.now(); lastMessageCheckRef.current = Date.now(); }
+    finally { setIsLoading(false); }
+  };
+  const socialLogin = async (provider, email, name) => {
+    setIsLoading(true);
+    try { await api.socialLogin(provider, email, name); setView('dashboard'); lastJobCheckRef.current = Date.now(); lastMessageCheckRef.current = Date.now(); }
+    finally { setIsLoading(false); }
+  };
+  const register = async (data) => {
+    setIsLoading(true);
+    try { await api.register(data); setView('dashboard'); lastJobCheckRef.current = Date.now(); lastMessageCheckRef.current = Date.now(); }
+    finally { setIsLoading(false); }
+  };
+  const logout = async () => { await api.logout(); setView('dashboard'); };
+  const updateUserProfile = async (data) => {
+    setIsLoading(true);
+    try { await api.updateUser(data); } finally { setIsLoading(false); }
+  };
+  const refreshUser = () => {};
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return;
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') new Notification("Notifications Enabled", { body: "You will now receive real-time job and chat alerts!", icon: 'https://cdn-icons-png.flaticon.com/512/3043/3043233.png' });
+  };
+
+  return React.createElement(AppContext.Provider, {
+    value: { user, isLoading, currentView, setView, login, socialLogin, register, logout, updateUserProfile, refreshUser, requestNotificationPermission }
+  }, children);
+}
+
+function useApp() {
+  const context = useContext(AppContext);
+  if (context === undefined) throw new Error('useApp must be used within an AppProvider');
+  return context;
+}
+
+// ============================================================
+// LOCATION PICKER COMPONENT
+// ============================================================
+function LocationPicker({ initialLat, initialLng, onConfirm, onCancel, readOnly = false, embedded = false }) {
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const [center, setCenter] = useState(null);
+  const [isLocating, setIsLocating] = useState(false);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+    const defaultLat = initialLat || 20.5937;
+    const defaultLng = initialLng || 78.9629;
+    const zoomLevel = initialLat ? 15 : 5;
+    const map = L.map(mapContainerRef.current, {
+      zoomControl: !embedded, attributionControl: false,
+      dragging: true, touchZoom: true, scrollWheelZoom: !embedded,
+      doubleClickZoom: true, boxZoom: true, keyboard: true
+    }).setView([defaultLat, defaultLng], zoomLevel);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    mapInstanceRef.current = map;
+    setCenter({ lat: defaultLat, lng: defaultLng });
+    if (initialLat && initialLng) L.marker([initialLat, initialLng]).addTo(map);
+    if (!readOnly) map.on('move', () => { const c = map.getCenter(); setCenter({ lat: c.lat, lng: c.lng }); });
+    if (!initialLat && !initialLng && !readOnly) handleLocateMe();
+    return () => { map.remove(); mapInstanceRef.current = null; };
+  }, []);
+
+  const handleLocateMe = () => {
+    setIsLocating(true);
+    if (!navigator.geolocation) { setIsLocating(false); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { mapInstanceRef.current?.setView([pos.coords.latitude, pos.coords.longitude], 16); setIsLocating(false); },
+      (err) => { console.error(err); setIsLocating(false); }
+    );
+  };
+
+  const containerClass = embedded ? "w-full h-full relative rounded-xl overflow-hidden bg-slate-100" : "fixed inset-0 z-[2000] bg-white flex flex-col animate-fade-in";
+
+  return React.createElement('div', { className: containerClass },
+    !embedded && React.createElement('div', { className: "bg-white p-4 shadow-md z-10 flex justify-between items-center border-b border-slate-100" },
+      React.createElement('button', { onClick: onCancel, className: "p-2 rounded-full hover:bg-slate-100 text-slate-500" }, React.createElement(X, { size: 24 })),
+      React.createElement('h3', { className: "font-bold text-slate-800" }, readOnly ? 'Job Location' : 'Pin Location'),
+      !readOnly && React.createElement('button', { onClick: () => center && onConfirm && onConfirm(center.lat, center.lng), className: "flex items-center gap-1 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold" },
+        React.createElement(Check, { size: 18 }), ' Confirm'
+      )
+    ),
+    React.createElement('div', { className: `flex-1 relative bg-slate-100 ${embedded ? 'min-h-full' : ''}` },
+      React.createElement('div', { ref: mapContainerRef, className: "absolute inset-0 z-0" }),
+      !readOnly && React.createElement('div', { className: "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none -mt-4" },
+        React.createElement(MapPin, { size: 48, className: "text-indigo-600 drop-shadow-xl fill-indigo-100" }),
+        React.createElement('div', { className: "w-2 h-2 bg-indigo-800 rounded-full mx-auto -mt-1 shadow-sm" })
+      ),
+      !readOnly && React.createElement('button', { onClick: handleLocateMe, className: "absolute bottom-6 right-6 z-10 bg-white p-3 rounded-full shadow-lg border border-slate-200 text-indigo-600" },
+        isLocating ? React.createElement(Loader2, { size: 24, className: "animate-spin" }) : React.createElement(Navigation, { size: 24 })
+      ),
+      !readOnly && React.createElement('div', { className: "absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-sm text-xs font-medium text-slate-600 border border-slate-200 pointer-events-none" }, "Move map to adjust pin")
+    ),
+    !embedded && React.createElement('div', { className: "bg-white p-4 border-t border-slate-100" },
+      React.createElement('p', { className: "text-xs text-slate-400 uppercase tracking-wider mb-1" }, readOnly ? 'Exact Location' : 'Selected Coordinates'),
+      React.createElement('p', { className: "font-mono text-slate-700 font-medium" },
+        readOnly && initialLat && initialLng ? `${initialLat.toFixed(6)}, ${initialLng.toFixed(6)}` : center ? `${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}` : 'Locating...'
+      )
+    )
+  );
+}
+
+// ============================================================
+// CHAT INTERFACE COMPONENT
+// ============================================================
+function ChatInterface({ jobId, currentUserId, otherUserName, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const loadMessages = async () => {
+    const msgs = await api.getJobMessages(jobId);
+    setMessages(msgs);
+    setIsLoading(false);
+    await api.markMessagesAsRead(jobId, currentUserId);
+  };
+
+  useEffect(() => {
+    loadMessages();
+    const interval = setInterval(loadMessages, 3000);
+    return () => clearInterval(interval);
+  }, [jobId]);
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+    setIsSending(true);
+    try { await api.sendMessage(jobId, currentUserId, newMessage); setNewMessage(''); loadMessages(); }
+    finally { setIsSending(false); }
+  };
+
+  return React.createElement('div', { className: "fixed inset-0 z-[2200] bg-black/50 flex items-center justify-center p-4 animate-fade-in" },
+    React.createElement('div', { className: "bg-white w-full max-w-md h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden" },
+      React.createElement('div', { className: "bg-indigo-600 p-4 flex items-center justify-between text-white shrink-0" },
+        React.createElement('div', { className: "flex items-center gap-3" },
+          React.createElement('div', { className: "w-10 h-10 bg-white/20 rounded-full flex items-center justify-center" }, React.createElement(UserIcon, { size: 20 })),
+          React.createElement('div', null,
+            React.createElement('h3', { className: "font-bold text-sm" }, otherUserName),
+            React.createElement('p', { className: "text-xs text-indigo-200" }, "Online")
+          )
+        ),
+        React.createElement('button', { onClick: onClose, className: "p-2 hover:bg-white/10 rounded-full" }, React.createElement(X, { size: 20 }))
+      ),
+      React.createElement('div', { className: "flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4" },
+        isLoading ? React.createElement('div', { className: "flex justify-center items-center h-full text-slate-400" }, React.createElement(Loader2, { size: 24, className: "animate-spin" })) :
+        messages.length === 0 ? React.createElement('div', { className: "flex flex-col items-center justify-center h-full text-slate-400 text-sm" }, React.createElement('p', null, "No messages yet."), React.createElement('p', null, "Start the conversation!")) :
+        messages.map(msg => {
+          const isMe = msg.senderId === currentUserId;
+          return React.createElement('div', { key: msg.id, className: `flex ${isMe ? 'justify-end' : 'justify-start'}` },
+            React.createElement('div', { className: `max-w-[75%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white text-slate-700 border border-slate-200 rounded-bl-none'}` },
+              React.createElement('p', null, msg.text),
+              React.createElement('p', { className: `text-[10px] mt-1 text-right ${isMe ? 'text-indigo-200' : 'text-slate-400'}` }, new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+            )
+          );
+        }),
+        React.createElement('div', { ref: messagesEndRef })
+      ),
+      React.createElement('form', { onSubmit: handleSend, className: "p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0" },
+        React.createElement('input', { type: "text", value: newMessage, onChange: e => setNewMessage(e.target.value), placeholder: "Type a message...", className: "flex-1 bg-slate-100 border-none rounded-full px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" }),
+        React.createElement('button', { type: "submit", disabled: !newMessage.trim() || isSending, className: "p-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50" },
+          isSending ? React.createElement(Loader2, { size: 20, className: "animate-spin" }) : React.createElement(Send, { size: 20 })
+        )
+      )
+    )
+  );
+}
+
+// ============================================================
+// ROLE SELECTOR COMPONENT
+// ============================================================
+function RoleSelector() {
+  const { user, updateUserProfile } = useApp();
+  if (!user) return null;
+  const handleRoleSelect = (role) => updateUserProfile({ role, roleSelected: true });
+  return React.createElement('div', { className: "space-y-6 animate-fade-in" },
+    React.createElement('div', { className: "text-center py-6" },
+      React.createElement('h2', { className: "text-2xl font-bold text-slate-800" }, `Welcome, ${user.name || 'User'}!`),
+      React.createElement('p', { className: "text-slate-500 mt-2" }, "How would you like to use KaamConnect today?")
+    ),
+    React.createElement('div', { className: "grid grid-cols-1 gap-4" },
+      React.createElement('button', { onClick: () => handleRoleSelect('client'), className: "group relative flex items-center p-6 bg-white border-2 border-slate-100 rounded-xl shadow-sm hover:border-indigo-500 hover:shadow-md transition-all text-left" },
+        React.createElement('div', { className: "bg-indigo-50 p-4 rounded-full mr-4 group-hover:bg-indigo-100" }, React.createElement(Briefcase, { className: "w-8 h-8 text-indigo-600" })),
+        React.createElement('div', null,
+          React.createElement('h3', { className: "text-lg font-bold text-slate-800" }, "Hire a Worker"),
+          React.createElement('p', { className: "text-sm text-slate-500" }, "Post jobs and find skilled local help.")
+        )
+      ),
+      React.createElement('button', { onClick: () => handleRoleSelect('worker'), className: "group relative flex items-center p-6 bg-white border-2 border-slate-100 rounded-xl shadow-sm hover:border-emerald-500 hover:shadow-md transition-all text-left" },
+        React.createElement('div', { className: "bg-emerald-50 p-4 rounded-full mr-4 group-hover:bg-emerald-100" }, React.createElement(Hammer, { className: "w-8 h-8 text-emerald-600" })),
+        React.createElement('div', null,
+          React.createElement('h3', { className: "text-lg font-bold text-slate-800" }, "Find Work"),
+          React.createElement('p', { className: "text-sm text-slate-500" }, "Browse jobs nearby and earn money.")
+        )
+      ),
+      user.isAdmin && React.createElement('button', { onClick: () => handleRoleSelect('admin'), className: "mt-4 flex items-center justify-center p-3 text-slate-400 hover:text-slate-600 text-sm" },
+        React.createElement(Shield, { className: "w-4 h-4 mr-2" }), "Access Admin Panel"
+      )
+    )
+  );
+}
+
+// ============================================================
+// LAYOUT COMPONENT
+// ============================================================
+function Layout({ children }) {
+  const { user, logout, updateUserProfile, currentView, setView } = useApp();
+  return React.createElement('div', { className: "min-h-screen bg-slate-100 flex flex-col md:flex-row md:justify-center" },
+    React.createElement('div', { className: "w-full max-w-md md:max-w-4xl mx-auto bg-white shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-screen md:min-h-0 md:h-[90vh] md:my-auto md:rounded-2xl" },
+      user && !user.isAdmin && user.roleSelected && React.createElement('aside', { className: "hidden md:flex w-64 bg-slate-50 border-r border-slate-200 flex-col p-6" },
+        React.createElement('div', { className: "mb-8" },
+          React.createElement('h1', { className: "text-2xl font-bold text-indigo-700 tracking-tight" }, APP_NAME),
+          React.createElement('span', { className: "text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold mt-1 inline-block" }, user.role)
+        ),
+        React.createElement('nav', { className: "flex-1 space-y-2" },
+          React.createElement('button', { onClick: () => setView('dashboard'), className: `w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${currentView === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'}` },
+            React.createElement(Briefcase, { size: 20 }), React.createElement('span', { className: "font-medium" }, "Jobs")
+          ),
+          React.createElement('button', { onClick: () => setView('settings'), className: `w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${currentView === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'}` },
+            React.createElement(UserIcon, { size: 20 }), React.createElement('span', { className: "font-medium" }, "Profile")
+          )
+        ),
+        React.createElement('div', { className: "pt-6 border-t border-slate-200" },
+          React.createElement('button', { onClick: logout, className: "flex items-center gap-2 text-slate-500 hover:text-red-600 transition-colors" },
+            React.createElement(LogOut, { size: 18 }), React.createElement('span', { className: "text-sm font-medium" }, "Sign Out")
+          )
+        )
+      ),
+      React.createElement('div', { className: "flex-1 flex flex-col h-full overflow-hidden" },
+        React.createElement('header', { className: `bg-indigo-600 text-white p-4 flex justify-between items-center sticky top-0 z-50 ${user && !user.isAdmin && user.roleSelected ? 'md:hidden' : ''}` },
+          React.createElement('div', { className: "flex items-center gap-2" },
+            React.createElement('h1', { className: "text-xl font-bold tracking-tight" }, APP_NAME),
+            user && React.createElement('span', { className: "text-xs bg-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold" }, user.role)
+          ),
+          user && React.createElement('div', { className: "flex items-center gap-3" },
+            user.isAdmin && React.createElement(ShieldCheck, { size: 20, className: "text-yellow-300" }),
+            !user.isAdmin && user.roleSelected && React.createElement('button', { onClick: () => updateUserProfile({ roleSelected: false }), className: "text-xs bg-indigo-500 hover:bg-indigo-400 text-white px-2 py-1 rounded transition-colors" }, "Switch Role"),
+            React.createElement('button', { onClick: logout, className: "p-2 hover:bg-indigo-700 rounded-full transition-colors md:hidden" }, React.createElement(LogOut, { size: 20 }))
+          )
+        ),
+        React.createElement('main', { className: "flex-1 overflow-y-auto p-4 scrollbar-hide relative bg-white" }, children),
+        user && !user.isAdmin && user.roleSelected && React.createElement('nav', { className: "md:hidden bg-white border-t border-slate-200 p-3 flex justify-around items-center" },
+          React.createElement('button', { onClick: () => setView('dashboard'), className: `flex flex-col items-center transition-colors ${currentView === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}` },
+            React.createElement(Briefcase, { size: 24 }), React.createElement('span', { className: "text-xs font-medium mt-1" }, "Jobs")
+          ),
+          React.createElement('button', { onClick: () => setView('settings'), className: `flex flex-col items-center transition-colors ${currentView === 'settings' ? 'text-indigo-600' : 'text-slate-400'}` },
+            React.createElement(UserIcon, { size: 24 }), React.createElement('span', { className: "text-xs font-medium mt-1" }, "Profile")
+          )
+        )
+      )
+    )
+  );
+}
+
+// ============================================================
+// LOGIN PAGE
+// ============================================================
+function Login() {
+  const { login, socialLogin, register } = useApp();
+  const [isLoginView, setIsLoginView] = useState(true);
+  const [showForgot, setShowForgot] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setSuccessMsg(''); setIsSubmitting(true);
+    try {
+      if (showForgot) {
+        if (!email) throw new Error("Please enter your email.");
+        await api.resetPasswordRequest(email);
+        setSuccessMsg(`Reset link sent to ${email}`);
+      } else if (isLoginView) {
+        await login(email, password);
+      } else {
+        if (!name || !email || !password || !phone) throw new Error("Please fill in all required fields.");
+        await register({ name, email, password, phone, location });
+      }
+    } catch (err) { setError(err.message || 'Authentication failed'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const handleGoogleClick = async () => {
+    setError(''); setIsSubmitting(true);
+    try { await socialLogin('google', '', ''); }
+    catch (err) { setError(err.message || 'Google login failed'); setIsSubmitting(false); }
+  };
+
+  return React.createElement('div', { className: "min-h-screen bg-[#F3F4F6] md:flex md:items-center md:justify-center p-0 relative overflow-hidden" },
+    React.createElement('div', { className: "absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0" },
+      React.createElement('div', { className: "absolute -top-[30%] -left-[10%] w-[70%] h-[70%] bg-indigo-200/30 rounded-full blur-[100px]" }),
+      React.createElement('div', { className: "absolute top-[20%] -right-[10%] w-[50%] h-[60%] bg-emerald-100/40 rounded-full blur-[100px]" })
+    ),
+    React.createElement('div', { className: "w-full max-w-[1050px] h-full md:h-[680px] bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10 border border-white/40" },
+      React.createElement('div', { className: "w-full md:w-[45%] relative hidden md:block overflow-hidden bg-slate-900 group" },
+        React.createElement('div', { className: "absolute inset-0 bg-cover bg-center transition-transform duration-[30s] ease-in-out group-hover:scale-110", style: { backgroundImage: `url('https://images.unsplash.com/photo-1573167243872-43c6433b9d40?q=80&w=1969&auto=format&fit=crop')` } }),
+        React.createElement('div', { className: "absolute inset-0 bg-gradient-to-b from-indigo-900/80 via-indigo-900/60 to-slate-900/90 mix-blend-multiply" }),
+        React.createElement('div', { className: "relative z-10 h-full flex flex-col justify-between p-10 text-white" },
+          React.createElement('div', null,
+            React.createElement('div', { className: "flex items-center gap-3 mb-8" },
+              React.createElement('div', { className: "bg-white/10 backdrop-blur-md border border-white/20 p-2.5 rounded-xl shadow-lg" }, React.createElement(Sprout, { className: "text-emerald-300", size: 24 })),
+              React.createElement('h1', { className: "text-xl font-bold tracking-tight text-white/90" },
+                "Connect", React.createElement('span', { className: "text-indigo-300" }, "Work")
+              )
+            ),
+            React.createElement('div', { className: "space-y-6 animate-fade-in pt-4" },
+              React.createElement('h2', { className: "text-4xl font-bold text-white leading-tight" }, "Empowering ", React.createElement('br'), React.createElement('span', { className: "text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-emerald-200" }, "Local Communities")),
+              React.createElement('p', { className: "text-indigo-100 font-light leading-relaxed text-base border-l-2 border-indigo-400/50 pl-4" }, "Connect securely with skilled professionals in your area. Simple booking, secure escrow payments, and verified profiles.")
+            )
+          ),
+          React.createElement('div', { className: "animate-fade-in space-y-6" },
+            React.createElement('div', { className: "bg-white/5 backdrop-blur-sm border border-white/10 p-4 rounded-2xl" },
+              React.createElement('div', { className: "flex items-center gap-2 mb-2 text-indigo-200 text-xs font-bold uppercase tracking-wider" }, React.createElement(GraduationCap, { size: 14 }), " LBRCE Student Project"),
+              React.createElement('p', { className: "text-xs text-slate-300 leading-relaxed" }, "A fully functional marketplace platform demonstrating advanced React patterns and secure workflow simulation.")
+            )
+          )
+        )
+      ),
+      React.createElement('div', { className: "w-full md:w-[55%] flex flex-col h-full bg-white relative" },
+        React.createElement('div', { className: "md:hidden bg-gradient-to-r from-indigo-600 to-indigo-700 p-8 pb-10 text-white text-center rounded-b-[2.5rem] mb-4 relative z-10 shadow-lg" },
+          React.createElement('div', { className: "bg-white/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" }, React.createElement(Sprout, { size: 32, className: "text-emerald-300" })),
+          React.createElement('h1', { className: "text-2xl font-bold tracking-tight" }, APP_NAME),
+          React.createElement('p', { className: "text-xs text-indigo-200 font-medium mt-1 uppercase tracking-wide" }, "Secure Local Services")
+        ),
+        React.createElement('div', { className: "flex-1 overflow-y-auto px-8 md:px-16 py-10 custom-scrollbar flex flex-col justify-center" },
+          React.createElement('div', { className: "text-center mb-10" },
+            !showForgot && React.createElement(React.Fragment, null,
+              React.createElement('h2', { className: "text-3xl font-extrabold text-slate-800 tracking-tight mb-2" }, isLoginView ? 'Welcome Back' : 'Join Us'),
+              React.createElement('p', { className: "text-slate-500 text-sm" }, isLoginView ? 'Please enter your details to sign in.' : 'Create an account to start your journey.')
+            )
+          ),
+          showForgot ? React.createElement('div', { className: "text-center animate-fade-in max-w-sm mx-auto" },
+            React.createElement('div', { className: "mx-auto w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6 text-indigo-600" }, React.createElement(Key, { size: 32 })),
+            React.createElement('h2', { className: "text-2xl font-bold text-slate-800 mb-2" }, "Reset Password"),
+            React.createElement('p', { className: "text-slate-500 text-sm mb-8" }, "No worries! Enter your email and we will send you reset instructions."),
+            successMsg ? React.createElement('div', { className: "bg-green-50 border border-green-100 text-green-700 p-4 rounded-xl text-sm mb-6 flex items-start gap-3 text-left" },
+              React.createElement(CheckCircle, { size: 18, className: "shrink-0 mt-0.5" }), React.createElement('div', null, successMsg)
+            ) : React.createElement('form', { onSubmit: handleSubmit, className: "space-y-4" },
+              React.createElement('div', { className: "group relative" },
+                React.createElement(Mail, { className: "absolute left-4 top-3.5 h-5 w-5 text-slate-400" }),
+                React.createElement('input', { type: "email", placeholder: "Enter your email", required: true, value: email, onChange: e => setEmail(e.target.value), className: "block w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none" })
+              ),
+              React.createElement('button', { type: "submit", disabled: isSubmitting, className: "w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all" }, isSubmitting ? 'Sending Link...' : 'Send Reset Link')
+            ),
+            React.createElement('button', { onClick: () => { setShowForgot(false); setError(''); setSuccessMsg(''); }, className: "mt-8 flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800" },
+              React.createElement(ArrowLeft, { size: 16 }), " Back to Login"
+            )
+          ) : React.createElement('form', { onSubmit: handleSubmit, className: "space-y-5 animate-fade-in max-w-sm mx-auto w-full" },
+            !isLoginView && React.createElement('div', { className: "group relative" },
+              React.createElement(User, { className: "absolute left-4 top-3.5 h-5 w-5 text-slate-400" }),
+              React.createElement('input', { type: "text", placeholder: "Full Name", required: true, value: name, onChange: e => setName(e.target.value), className: "block w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm" })
+            ),
+            React.createElement('div', { className: "group relative" },
+              React.createElement(Mail, { className: "absolute left-4 top-3.5 h-5 w-5 text-slate-400" }),
+              React.createElement('input', { type: "email", placeholder: "Email Address", required: true, value: email, onChange: e => setEmail(e.target.value), className: "block w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm" })
+            ),
+            !isLoginView && React.createElement(React.Fragment, null,
+              React.createElement('div', { className: "group relative" },
+                React.createElement(Phone, { className: "absolute left-4 top-3.5 h-5 w-5 text-slate-400" }),
+                React.createElement('input', { type: "tel", placeholder: "Phone Number", required: true, value: phone, onChange: e => setPhone(e.target.value), className: "block w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm" })
+              ),
+              React.createElement('div', { className: "group relative" },
+                React.createElement(MapPin, { className: "absolute left-4 top-3.5 h-5 w-5 text-slate-400" }),
+                React.createElement('input', { type: "text", placeholder: "City / Location", value: location, onChange: e => setLocation(e.target.value), className: "block w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm" })
+              )
+            ),
+            React.createElement('div', { className: "group relative" },
+              React.createElement(Lock, { className: "absolute left-4 top-3.5 h-5 w-5 text-slate-400" }),
+              React.createElement('input', { type: "password", placeholder: "Password", required: true, value: password, onChange: e => setPassword(e.target.value), className: "block w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm" })
+            ),
+            isLoginView && React.createElement('div', { className: "flex items-center justify-between text-sm pt-1" },
+              React.createElement('span', { className: "text-slate-500" }, ""),
+              React.createElement('button', { type: "button", onClick: () => setShowForgot(true), className: "text-indigo-600 font-semibold hover:text-indigo-700" }, "Forgot Password?")
+            ),
+            error && React.createElement('p', { className: "text-red-600 text-sm text-center bg-red-50 border border-red-100 p-3 rounded-xl animate-shake" }, error),
+            React.createElement('button', { type: "submit", disabled: isSubmitting, className: "w-full py-3.5 px-4 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all flex justify-center items-center mt-2" },
+              isSubmitting ? React.createElement(Loader2, { className: "animate-spin", size: 20 }) : React.createElement(React.Fragment, null, isLoginView ? 'Sign In' : 'Create Account', React.createElement(ArrowRight, { size: 18, className: "ml-2" }))
+            )
+          ),
+          !showForgot && React.createElement('div', { className: "mt-8 max-w-sm mx-auto w-full" },
+            React.createElement('div', { className: "relative" },
+              React.createElement('div', { className: "absolute inset-0 flex items-center" }, React.createElement('div', { className: "w-full border-t border-slate-200" })),
+              React.createElement('div', { className: "relative flex justify-center text-xs uppercase tracking-wider font-bold" }, React.createElement('span', { className: "px-4 bg-white text-slate-400" }, "Or continue with"))
+            ),
+            React.createElement('div', { className: "mt-6 grid grid-cols-2 gap-4" },
+              React.createElement('button', { onClick: handleGoogleClick, disabled: isSubmitting, className: "flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl hover:bg-slate-50 group" },
+                React.createElement(Chrome, { className: "w-5 h-5 text-slate-600 group-hover:text-red-500 mr-2" }),
+                React.createElement('span', { className: "text-sm font-semibold text-slate-600" }, "Google")
+              ),
+              React.createElement('button', { disabled: isSubmitting, className: "flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl hover:bg-slate-50 group" },
+                React.createElement(Facebook, { className: "w-5 h-5 text-slate-600 group-hover:text-blue-600 mr-2" }),
+                React.createElement('span', { className: "text-sm font-semibold text-slate-600" }, "Facebook")
+              )
+            ),
+            React.createElement('div', { className: "mt-8 text-center" },
+              React.createElement('p', { className: "text-slate-500 text-sm" },
+                isLoginView ? "Don't have an account?" : "Already have an account?",
+                React.createElement('button', { onClick: () => { setIsLoginView(!isLoginView); setError(''); }, className: "ml-2 text-indigo-600 font-bold hover:text-indigo-800" }, isLoginView ? 'Sign Up' : 'Log In')
+              )
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+// ============================================================
+// CATEGORY ICON HELPER
+// ============================================================
+function getCategoryIcon(category) {
+  const iconProps = { size: 18, className: "shrink-0" };
+  const map = {
+    [WorkerCategory.AGRICULTURE]: { bg: "bg-green-100 text-green-700", icon: React.createElement(Tractor, iconProps) },
+    [WorkerCategory.PLUMBER]: { bg: "bg-blue-100 text-blue-600", icon: React.createElement(Droplets, iconProps) },
+    [WorkerCategory.ELECTRICIAN]: { bg: "bg-yellow-100 text-yellow-600", icon: React.createElement(Zap, iconProps) },
+    [WorkerCategory.MECHANIC]: { bg: "bg-slate-100 text-slate-600", icon: React.createElement(Wrench, iconProps) },
+    [WorkerCategory.CARPENTER]: { bg: "bg-orange-100 text-orange-600", icon: React.createElement(Hammer, iconProps) },
+    [WorkerCategory.PAINTER]: { bg: "bg-pink-100 text-pink-600", icon: React.createElement(Paintbrush, iconProps) },
+    [WorkerCategory.MASON]: { bg: "bg-red-100 text-red-600", icon: React.createElement(BrickWall, iconProps) },
+    [WorkerCategory.CLEANER]: { bg: "bg-purple-100 text-purple-600", icon: React.createElement(Sparkles, iconProps) },
+    [WorkerCategory.DRIVER]: { bg: "bg-indigo-100 text-indigo-600", icon: React.createElement(Car, iconProps) },
+    [WorkerCategory.LABORER]: { bg: "bg-yellow-100 text-yellow-700", icon: React.createElement(HardHat, iconProps) },
+  };
+  const item = map[category] || { bg: "bg-slate-100 text-slate-500", icon: React.createElement(Briefcase, iconProps) };
+  return React.createElement('div', { className: `p-2 rounded-lg ${item.bg}` }, item.icon);
+}
+
+// ============================================================
+// CLIENT DASHBOARD
+// ============================================================
+function ClientDashboard() {
+  const { user, refreshUser } = useApp();
+  const [activeTab, setActiveTab] = useState('post');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [subCategory, setSubCategory] = useState(undefined);
+  const [location, setLocation] = useState(user?.location || '');
+  const [budget, setBudget] = useState('');
+  const [coords, setCoords] = useState(user?.coords);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [postSuccess, setPostSuccess] = useState(false);
+  const [myJobs, setMyJobs] = useState([]);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [interestedWorkers, setInterestedWorkers] = useState([]);
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [activeChatJob, setActiveChatJob] = useState(null);
+  const [jobToRate, setJobToRate] = useState(null);
+  const [ratingStars, setRatingStars] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [scanJob, setScanJob] = useState(null);
+  const [qrInput, setQrInput] = useState('');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isCompletingJob, setIsCompletingJob] = useState(null);
+  const [isBooking, setIsBooking] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterCategory, setFilterCategory] = useState('ALL');
+  const [expandedJobId, setExpandedJobId] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [showAddFunds, setShowAddFunds] = useState(false);
+  const [addFundsAmount, setAddFundsAmount] = useState('1000');
+
+  const showToast = (msg) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3000); };
+
+  if (!user?.name) return React.createElement('div', { className: "p-6 bg-white rounded-xl shadow-sm" },
+    React.createElement('h2', { className: "text-xl font-bold mb-4" }, "Complete Profile"),
+    React.createElement('input', { type: "text", placeholder: "Your Name", className: "w-full p-3 border rounded mb-4", onBlur: e => { if(e.target.value) api.updateUser({ name: e.target.value }).then(refreshUser); } }),
+    React.createElement('p', { className: "text-sm text-slate-500" }, "Please enter your name to continue.")
+  );
+
+  const fetchMyJobs = async () => {
+    if (user) {
+      const jobs = await api.getJobs({ type: 'client', userId: user.id });
+      setMyJobs(jobs);
+      const counts = await api.getUnreadCounts(user.id);
+      setUnreadCounts(counts);
+    }
+  };
+
+  useEffect(() => { if (activeTab === 'my-jobs') fetchMyJobs(); }, [activeTab]);
+
+  const handleOptimize = async () => {
+    if (!description) return;
+    setIsOptimizing(true);
+    const optimized = await optimizeJobDescription(description, category || 'General');
+    setDescription(optimized);
+    setIsOptimizing(false);
+  };
+
+  const handleListenToDescription = async () => {
+    if (!description || isPlayingAudio) return;
+    setIsPlayingAudio(true);
+    try {
+      let textToSpeak = description;
+      if (user?.language && user.language !== 'en') textToSpeak = await translateText(description, user.language);
+      const base64Audio = await generateSpeech(textToSpeak);
+      if (base64Audio) await playRawAudio(base64Audio);
+      else showToast("Could not generate audio at this time.");
+    } catch (error) { showToast("Failed to play audio."); }
+    finally { setIsPlayingAudio(false); }
+  };
+
+  const handleLocationSelect = async (lat, lng) => {
+    setCoords({ lat, lng }); setShowMap(false);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const data = await response.json();
+      let addr = '';
+      if (data.address) {
+        const parts = [data.address.road, data.address.village || data.address.suburb, data.address.city || data.address.town, data.address.state_district].filter(Boolean);
+        addr = parts.length > 0 ? parts.join(', ') : data.display_name.split(',').slice(0, 3).join(',');
+      } else { addr = `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`; }
+      setLocation(addr);
+    } catch { setLocation(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
+  };
+
+  const handleSearchLocation = async () => {
+    if (location && location.trim().length > 0) {
+      setIsSearching(true);
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`);
+        const data = await response.json();
+        if (data && data.length > 0) setCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+        else showToast("Location not found.");
+      } catch { console.error("Geocoding failed"); }
+      finally { setIsSearching(false); }
+    }
+  };
+
+  const handlePostJob = async (e) => {
+    e.preventDefault();
+    if (!user || !category || !budget) return;
+    setIsPosting(true);
+    let finalTitle = `${category} needed in ${location}`;
+    if (category === WorkerCategory.AGRICULTURE && subCategory) finalTitle = `${subCategory} needed in ${location}`;
+    await api.postJob({ clientId: user.id, clientName: user.name, clientPhone: user.phone, title: finalTitle, description, category, subCategory, location, budget: parseInt(budget, 10), coords });
+    setIsPosting(false); setDescription(''); setCategory(''); setSubCategory(undefined); setBudget('');
+    setActiveTab('my-jobs'); setPostSuccess(true); setTimeout(() => setPostSuccess(false), 3000);
+  };
+
+  const handleViewWorkers = async (job) => {
+    const latestJob = await api.getJobById(job.id);
+    if (!latestJob) return;
+    setSelectedJob(latestJob);
+    const workers = await api.getWorkersByIds(latestJob.interestedWorkerIds);
+    setInterestedWorkers(workers);
+  };
+
+  const handleBookWorker = async (workerId) => {
+    if (!selectedJob) return;
+    setIsBooking(workerId);
+    try {
+      const updatedJob = await api.bookWorker(selectedJob.id, workerId, 'CASH');
+      setMyJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
+      refreshUser(); showToast("Worker Booked Successfully!"); setSelectedJob(null);
+    } catch (e) { showToast("Booking failed: " + (e.message || "Unknown error")); }
+    finally { setIsBooking(null); fetchMyJobs(); }
+  };
+
+  const handleMarkCompleted = async (job) => {
+    setIsCompletingJob(job.id);
+    try {
+      const result = await api.completeJob(job.id);
+      setMyJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'COMPLETED', paymentStatus: 'RELEASED' } : j));
+      showToast(result.method === 'ONLINE' ? `Success! Funds released to worker.` : `Success! Job marked as completed.`);
+    } catch (error) { showToast(error.message); }
+    finally { setIsCompletingJob(null); fetchMyJobs(); }
+  };
+
+  const handleVerifyPayment = async () => {
+    if (!scanJob || !qrInput) return;
+    setIsProcessingPayment(true);
+    try { await api.verifyAndPayout(scanJob.id, qrInput); showToast(`Success! Job verified & completed.`); setScanJob(null); setQrInput(''); fetchMyJobs(); }
+    catch (error) { showToast(error.message); }
+    finally { setIsProcessingPayment(false); }
+  };
+
+  const filteredJobs = myJobs.filter(job => {
+    if (filterStatus !== 'ALL' && job.status !== filterStatus) return false;
+    if (filterCategory !== 'ALL' && job.category !== filterCategory) return false;
+    return true;
+  });
+
+  return React.createElement('div', { className: "pb-20" },
+    postSuccess && React.createElement('div', { className: "fixed top-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg animate-fade-in" },
+      React.createElement('div', { className: "bg-white/20 p-1 rounded-full" }, React.createElement(CheckCircle, { size: 16 })),
+      React.createElement('p', { className: "text-sm font-bold" }, "Job Posted Successfully!")
+    ),
+    showMap && React.createElement(LocationPicker, { initialLat: coords?.lat, initialLng: coords?.lng, onConfirm: handleLocationSelect, onCancel: () => setShowMap(false) }),
+    activeChatJob && user && React.createElement(ChatInterface, { jobId: activeChatJob.id, currentUserId: user.id, otherUserName: activeChatJob.assignedWorkerName || 'Worker', onClose: () => { setActiveChatJob(null); fetchMyJobs(); } }),
+
+    // Tabs
+    React.createElement('div', { className: "flex border-b border-slate-200 mb-6" },
+      ['post', 'my-jobs', 'wallet'].map(tab => React.createElement('button', { key: tab, onClick: () => setActiveTab(tab), className: `flex-1 py-3 text-sm font-medium ${activeTab === tab ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}` },
+        tab === 'post' ? 'Post a Job' : tab === 'my-jobs' ? 'My Jobs' : 'Wallet'
+      ))
+    ),
+
+    // Post Tab
+    activeTab === 'post' && React.createElement('form', { onSubmit: handlePostJob, className: "space-y-6 animate-fade-in" },
+      React.createElement('div', null,
+        React.createElement('label', { className: "block text-sm font-medium text-slate-700 mb-2" }, "Service Category"),
+        React.createElement('div', { className: "grid grid-cols-2 md:grid-cols-3 gap-2" },
+          CATEGORIES_LIST.map(cat => React.createElement('button', { key: cat, type: "button", onClick: () => { setCategory(cat); setSubCategory(undefined); }, className: `p-3 rounded-lg text-sm border flex items-center justify-center gap-2 ${category === cat ? 'bg-indigo-50 border-indigo-500 text-indigo-700 font-medium ring-1 ring-indigo-500' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}` },
+            getCategoryIcon(cat), cat
+          ))
+        )
+      ),
+      category === WorkerCategory.AGRICULTURE && React.createElement('div', { className: "animate-fade-in p-4 bg-green-50 border border-green-200 rounded-xl" },
+        React.createElement('h4', { className: "flex items-center gap-2 text-sm font-bold text-green-800 mb-3" }, React.createElement(Sprout, { size: 16 }), " Select Agriculture Requirement"),
+        React.createElement('div', { className: "grid grid-cols-2 gap-3" },
+          AGRI_SUB_CATEGORIES.map(sub => React.createElement('button', { key: sub.id, type: "button", onClick: () => setSubCategory(sub.label), className: `p-3 rounded-lg text-xs font-medium border flex flex-col items-center justify-center gap-1 text-center transition-all ${subCategory === sub.label ? 'bg-white border-green-600 text-green-700 shadow-md transform scale-105' : 'bg-white/60 border-green-100 text-slate-600 hover:bg-white'}` },
+            React.createElement('span', { className: "text-xl" }, sub.icon), sub.label
+          ))
+        )
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { className: "block text-sm font-medium text-slate-700 mb-2" }, "Location"),
+        React.createElement('div', { className: "flex gap-2" },
+          React.createElement('div', { className: "relative flex-1" },
+            React.createElement(MapPin, { className: "absolute left-3 top-3.5 h-5 w-5 text-slate-400" }),
+            React.createElement('input', { type: "text", value: location, onChange: e => setLocation(e.target.value), onKeyDown: e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchLocation(); } }, placeholder: "Area, Street, or Pincode", className: "w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-indigo-500" })
+          ),
+          React.createElement('button', { type: "button", onClick: handleSearchLocation, disabled: isSearching, className: "px-4 bg-indigo-50 border border-indigo-200 text-indigo-600 rounded-lg" },
+            isSearching ? React.createElement(Loader2, { size: 20, className: "animate-spin" }) : React.createElement(Search, { size: 20 })
+          ),
+          React.createElement('button', { type: "button", onClick: () => setShowMap(true), className: "px-4 bg-indigo-50 border border-indigo-200 text-indigo-600 rounded-lg" }, React.createElement(MapIcon, { size: 20 }))
+        ),
+        coords && React.createElement('p', { className: "text-xs text-green-600 mt-1 flex items-center" }, React.createElement(CheckCircle, { size: 10, className: "mr-1" }), " Exact pin selected")
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { className: "block text-sm font-medium text-slate-700 mb-2" }, "Budget (₹)"),
+        React.createElement('div', { className: "relative" },
+          React.createElement('span', { className: "absolute left-3 top-3 text-slate-500" }, "₹"),
+          React.createElement('input', { type: "number", value: budget, onChange: e => setBudget(e.target.value), placeholder: "500", className: "w-full pl-8 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-indigo-500" })
+        )
+      ),
+      React.createElement('div', null,
+        React.createElement('div', { className: "flex justify-between items-center mb-2" },
+          React.createElement('label', { className: "block text-sm font-medium text-slate-700" }, "Description"),
+          React.createElement('div', { className: "flex gap-2" },
+            React.createElement('button', { type: "button", onClick: handleListenToDescription, disabled: !description || isPlayingAudio, className: `text-xs flex items-center gap-1 font-medium transition-colors px-2 py-1 rounded-md border ${isPlayingAudio ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white text-slate-600 border-slate-200'} disabled:opacity-50` },
+              isPlayingAudio ? React.createElement(Loader2, { size: 12, className: "animate-spin" }) : React.createElement(Volume2, { size: 12 }),
+              isPlayingAudio ? 'Playing...' : 'Listen'
+            ),
+            React.createElement('button', { type: "button", onClick: handleOptimize, disabled: !description || isOptimizing, className: "text-xs flex items-center text-indigo-600 hover:text-indigo-800 disabled:opacity-50" },
+              React.createElement(Wand2, { className: "w-3 h-3 mr-1" }), isOptimizing ? 'Optimizing...' : 'AI Polish'
+            )
+          )
+        ),
+        React.createElement('textarea', { rows: 4, value: description, onChange: e => setDescription(e.target.value), className: "w-full p-3 border border-slate-300 rounded-lg focus:ring-indigo-500", placeholder: "Describe the issue..." })
+      ),
+      React.createElement('button', { type: "submit", disabled: isPosting || !category || !budget || (category === WorkerCategory.AGRICULTURE && !subCategory), className: "w-full py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2" },
+        isPosting ? React.createElement(Loader2, { className: "animate-spin" }) : React.createElement(ShieldCheck, { size: 20 }),
+        isPosting ? 'Posting...' : 'Post Job'
+      )
+    ),
+
+    // My Jobs Tab
+    activeTab === 'my-jobs' && React.createElement('div', { className: "space-y-4 animate-fade-in" },
+      React.createElement('div', { className: "bg-white p-3 rounded-xl border border-slate-200 shadow-sm" },
+        React.createElement('div', { className: "flex items-center gap-2 text-sm font-bold text-slate-700 mb-2" }, React.createElement(Filter, { size: 16 }), " Filter Jobs"),
+        React.createElement('div', { className: "flex gap-2" },
+          React.createElement('select', { value: filterStatus, onChange: e => setFilterStatus(e.target.value), className: "flex-1 p-2 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none" },
+            ['ALL','OPEN','BOOKED','COMPLETED','CANCELLED'].map(s => React.createElement('option', { key: s, value: s }, s === 'ALL' ? 'All Status' : s))
+          ),
+          React.createElement('select', { value: filterCategory, onChange: e => setFilterCategory(e.target.value), className: "flex-1 p-2 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none" },
+            [React.createElement('option', { key: 'ALL', value: 'ALL' }, "All Categories"), ...CATEGORIES_LIST.map(cat => React.createElement('option', { key: cat, value: cat }, cat))]
+          )
+        )
+      ),
+      filteredJobs.length === 0 ? React.createElement('div', { className: "text-center py-10 text-slate-400" }, React.createElement('p', null, myJobs.length === 0 ? 'No jobs posted yet.' : 'No jobs match your filters.')) :
+      filteredJobs.map(job => React.createElement('div', { key: job.id, className: "bg-white p-4 rounded-xl border border-slate-200 shadow-sm" },
+        React.createElement('div', { className: "flex justify-between items-start mb-2" },
+          React.createElement('h3', { className: "font-semibold text-slate-800 flex items-center gap-2" },
+            getCategoryIcon(job.category),
+            React.createElement('div', null, job.category, job.subCategory && React.createElement('span', { className: "block text-xs text-slate-500 font-normal" }, job.subCategory))
+          ),
+          React.createElement('div', { className: "flex flex-col items-end gap-1" },
+            React.createElement('span', { className: `text-xs px-2 py-1 rounded-full font-medium ${job.status === 'OPEN' ? 'bg-green-100 text-green-700' : job.status === 'BOOKED' ? 'bg-blue-100 text-blue-700' : job.status === 'COMPLETED' ? 'bg-slate-100 text-slate-700' : 'bg-red-100 text-red-700'}` }, job.status),
+            React.createElement('span', { className: "text-xs font-bold text-slate-700" }, `₹${job.budget}`)
+          )
+        ),
+        React.createElement('p', { className: "text-sm text-slate-600 mb-3" }, job.description),
+        React.createElement('div', { className: "flex items-center text-xs text-slate-400 mb-4" },
+          React.createElement(MapPin, { className: "w-3 h-3 mr-1" }), job.location,
+          React.createElement('span', { className: "mx-2" }, "•"),
+          React.createElement(Clock, { className: "w-3 h-3 mr-1" }), new Date(job.postedAt).toLocaleDateString()
+        ),
+        job.status === 'OPEN' && React.createElement('button', { onClick: () => handleViewWorkers(job), className: "w-full py-2 border border-indigo-200 text-indigo-600 rounded-lg text-sm font-medium hover:bg-indigo-50" }, `View Interested Workers (${job.interestedWorkerIds.length})`),
+        job.assignedWorkerId && (job.status === 'BOOKED' || job.status === 'COMPLETED') && React.createElement('div', { className: "mb-4 bg-white p-4 rounded-xl border border-indigo-100 shadow-sm" },
+          React.createElement('div', { className: "flex items-center gap-2 mb-3 pb-2 border-b border-slate-50" }, React.createElement(BadgeCheck, { className: "text-indigo-600", size: 16 }), React.createElement('span', { className: "text-xs font-bold text-slate-500 uppercase tracking-wider" }, "Assigned Professional")),
+          React.createElement('div', { className: "flex items-center gap-4 mb-4" },
+            React.createElement('div', { className: "w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-lg font-bold" }, job.assignedWorkerName?.charAt(0).toUpperCase() || React.createElement(UserIcon, { size: 24 })),
+            React.createElement('div', null,
+              React.createElement('h4', { className: "font-bold text-slate-800 text-base" }, job.assignedWorkerName),
+              React.createElement('div', { className: "flex items-center gap-2 text-sm text-slate-500" }, React.createElement(Phone, { size: 14 }), React.createElement('span', { className: "font-mono" }, job.assignedWorkerPhone || 'No Phone')),
+              job.assignedWorkerVerified && React.createElement('span', { className: "mt-1 flex items-center text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full border border-blue-100 font-medium w-fit" }, React.createElement(BadgeCheck, { size: 10, className: "mr-0.5" }), " Verified")
+            )
+          ),
+          React.createElement('div', { className: "grid grid-cols-3 gap-2" },
+            React.createElement('a', { href: `tel:${job.assignedWorkerPhone}`, className: "flex flex-col items-center justify-center gap-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200" }, React.createElement(Phone, { size: 18, className: "text-green-600" }), React.createElement('span', { className: "text-[10px] font-medium" }, "Call")),
+            React.createElement('a', { href: `https://wa.me/${job.assignedWorkerPhone?.replace(/\D/g,'')}`, target: "_blank", rel: "noreferrer", className: "flex flex-col items-center justify-center gap-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200" }, React.createElement(MessageSquare, { size: 18, className: "text-emerald-500" }), React.createElement('span', { className: "text-[10px] font-medium" }, "WhatsApp")),
+            React.createElement('button', { onClick: () => setActiveChatJob(job), className: "relative flex flex-col items-center justify-center gap-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200" },
+              React.createElement('div', { className: "relative" },
+                React.createElement(MessageCircle, { size: 18, className: "text-indigo-600" }),
+                unreadCounts[job.id] > 0 && React.createElement('span', { className: "absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full border border-white" }, unreadCounts[job.id])
+              ),
+              React.createElement('span', { className: "text-[10px] font-medium" }, "Chat")
+            )
+          )
+        ),
+        job.status === 'BOOKED' && React.createElement('div', { className: "space-y-2" },
+          React.createElement('button', { onClick: () => handleMarkCompleted(job), disabled: isCompletingJob === job.id, className: `w-full py-3 text-white rounded-lg text-sm font-bold shadow-lg flex items-center justify-center gap-2 ${job.paymentMethod === 'ONLINE' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'}` },
+            isCompletingJob === job.id ? React.createElement(Loader2, { className: "animate-spin", size: 18 }) : React.createElement(CheckCircle, { size: 18 }),
+            job.paymentMethod === 'ONLINE' ? 'Release Payment & Complete' : 'Mark Work Completed'
+          ),
+          React.createElement('div', { className: "flex gap-2" },
+            React.createElement('button', { onClick: () => setScanJob(job), className: "flex-1 py-2 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-100 flex items-center justify-center gap-2" }, React.createElement(QrCode, { size: 16 }), " Scan QR (Optional)"),
+            React.createElement('button', { onClick: () => api.updateJobStatus(job.id, 'CANCELLED').then(fetchMyJobs), className: "flex-1 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg text-xs font-medium hover:bg-red-100" }, "Cancel Job")
+          )
+        ),
+        job.status === 'COMPLETED' && React.createElement('div', { className: "mt-3" },
+          job.isRated ? React.createElement('div', { className: "w-full py-2 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-sm flex items-center justify-center gap-2" }, React.createElement(Star, { size: 16, fill: "gold", className: "text-yellow-400" }), " Rated") :
+          React.createElement('button', { onClick: () => { setJobToRate(job); setRatingStars(0); setRatingComment(''); }, className: "w-full py-2 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg text-sm font-medium hover:bg-yellow-100 flex items-center justify-center gap-2" }, React.createElement(Star, { size: 16 }), " Rate Worker")
+        ),
+        React.createElement('div', { className: "mt-4 pt-3 border-t border-slate-100 flex justify-center" },
+          React.createElement('button', { onClick: () => setExpandedJobId(expandedJobId === job.id ? null : job.id), className: "flex items-center text-xs font-medium text-slate-500 hover:text-indigo-600 bg-slate-50 px-3 py-1.5 rounded-full" },
+            expandedJobId === job.id ? React.createElement(React.Fragment, null, "Hide Details ", React.createElement(ChevronUp, { size: 14, className: "ml-1" })) : React.createElement(React.Fragment, null, "View Details ", React.createElement(ChevronDown, { size: 14, className: "ml-1" }))
+          )
+        ),
+        expandedJobId === job.id && React.createElement('div', { className: "mt-4 space-y-4 animate-fade-in bg-slate-50/50 p-3 rounded-xl border border-slate-100" },
+          job.coords && React.createElement('div', { className: "rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm" },
+            React.createElement('div', { className: "p-2 border-b border-slate-100 flex items-center justify-between bg-slate-50" },
+              React.createElement('div', { className: "flex items-center gap-2 text-xs font-bold text-slate-700" }, React.createElement(MapIcon, { size: 14, className: "text-indigo-500" }), " Location Map"),
+              React.createElement('a', { href: `https://www.google.com/maps/search/?api=1&query=${job.coords.lat},${job.coords.lng}`, target: "_blank", rel: "noopener noreferrer", className: "text-[10px] text-indigo-600 hover:underline flex items-center gap-1" }, React.createElement(Navigation, { size: 10 }), " Open GPS")
+            ),
+            React.createElement('div', { className: "h-48 w-full relative" }, React.createElement(LocationPicker, { initialLat: job.coords.lat, initialLng: job.coords.lng, readOnly: true, embedded: true }))
+          ),
+          React.createElement('div', { className: "bg-white rounded-xl border border-slate-200 p-3 shadow-sm" },
+            React.createElement('h4', { className: "text-xs font-bold text-slate-500 mb-3 flex items-center gap-2 uppercase tracking-wider" }, React.createElement(History, { size: 12 }), " Status History"),
+            React.createElement('div', { className: "relative pl-2" },
+              React.createElement('div', { className: "absolute left-[9px] top-2 bottom-2 w-0.5 bg-slate-100" }),
+              React.createElement('div', { className: "space-y-4" },
+                job.statusHistory?.map((entry, idx) => React.createElement('div', { key: idx, className: "relative flex items-start pl-6" },
+                  React.createElement('div', { className: `absolute left-0 top-1 w-5 h-5 rounded-full border-2 flex items-center justify-center z-10 bg-white ${idx === job.statusHistory.length - 1 ? 'border-indigo-500' : 'border-slate-300'}` },
+                    React.createElement('div', { className: `w-1.5 h-1.5 rounded-full ${idx === job.statusHistory.length - 1 ? 'bg-indigo-600' : 'bg-slate-300'}` })
+                  ),
+                  React.createElement('div', null,
+                    React.createElement('p', { className: "text-xs font-bold text-slate-700" }, entry.status),
+                    React.createElement('p', { className: "text-[10px] text-slate-500" }, new Date(entry.timestamp).toLocaleString()),
+                    entry.note && React.createElement('p', { className: "text-xs text-slate-600 mt-0.5 bg-slate-50 p-1.5 rounded border border-slate-100 italic" }, entry.note)
+                  )
+                ))
+              )
+            )
+          )
+        )
+      ))
+    ),
+
+    // Wallet Tab
+    activeTab === 'wallet' && React.createElement('div', { className: "space-y-6 animate-fade-in px-1" },
+      React.createElement('div', { className: "bg-gradient-to-br from-indigo-800 to-indigo-600 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden" },
+        React.createElement('div', { className: "absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" }),
+        React.createElement('div', { className: "relative z-10" },
+          React.createElement('p', { className: "text-indigo-200 text-sm font-medium mb-1" }, "Available Balance"),
+          React.createElement('h2', { className: "text-4xl font-bold mb-6" }, `₹${user?.walletBalance?.toFixed(2) || '0.00'}`),
+          React.createElement('button', { onClick: () => setShowAddFunds(true), className: "flex items-center gap-2 bg-white text-indigo-700 py-2.5 px-4 rounded-xl font-bold text-sm hover:bg-indigo-50" }, React.createElement(Plus, { size: 18 }), " Add Money")
+        )
+      ),
+      React.createElement('div', { className: "bg-white rounded-xl border border-slate-200 p-4" },
+        React.createElement('h3', { className: "font-bold text-slate-800 mb-4 flex items-center gap-2" }, React.createElement(Wallet, { size: 18 }), " Payment Methods"),
+        React.createElement('label', { className: "block text-xs font-medium text-slate-500 mb-1" }, "Linked UPI ID"),
+        React.createElement('div', { className: "flex gap-2" },
+          React.createElement('input', { type: "text", placeholder: "user@upi", className: "flex-1 p-2 border border-slate-300 rounded-lg text-sm", defaultValue: user?.paymentDetails?.upiId, onBlur: e => { if(e.target.value && e.target.value !== user?.paymentDetails?.upiId) api.updatePaymentDetails({ upiId: e.target.value }).then(refreshUser); } }),
+          React.createElement('button', { className: "bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-xs font-bold border border-slate-200" }, "Update")
+        )
+      )
+    ),
+
+    // Modals
+    selectedJob && React.createElement('div', { className: "fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" },
+      React.createElement('div', { className: "bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl animate-fade-in-up" },
+        React.createElement('h3', { className: "text-lg font-bold mb-4 text-slate-800" }, "Select a Professional"),
+        React.createElement('div', { className: "max-h-[60vh] overflow-y-auto space-y-3 mb-4 pr-1" },
+          interestedWorkers.length === 0 ? React.createElement('p', { className: "text-slate-500 text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-200" }, "No interest expressed yet.") :
+          interestedWorkers.map(w => React.createElement('div', { key: w.id, className: "p-4 border border-slate-200 rounded-xl bg-slate-50/50" },
+            React.createElement('div', { className: "flex justify-between items-start mb-3" },
+              React.createElement('div', null,
+                React.createElement('div', { className: "flex items-center gap-1" }, React.createElement('p', { className: "font-bold text-slate-800" }, w.name), w.isVerified && React.createElement(BadgeCheck, { size: 14, className: "text-blue-500" })),
+                React.createElement('div', { className: "flex items-center text-xs mt-1" },
+                  w.workerProfile?.rating ? React.createElement(React.Fragment, null,
+                    React.createElement('div', { className: "flex text-yellow-400 mr-1" }, Array.from({length: Math.round(w.workerProfile.rating)}).map((_, i) => React.createElement(Star, { key: i, size: 10, fill: "currentColor" }))),
+                    React.createElement('span', { className: "text-slate-400" }, `(${w.workerProfile.rating})`)
+                  ) : React.createElement('span', { className: "text-slate-400" }, "New Worker")
+                )
+              ),
+              React.createElement('div', { className: "text-right" },
+                React.createElement('span', { className: "text-xs font-bold text-slate-600 block" }, "Experience"),
+                React.createElement('span', { className: "text-xs text-slate-500" }, `${w.workerProfile?.experienceYears || 0} Years`)
+              )
+            ),
+            React.createElement('button', { onClick: () => handleBookWorker(w.id), disabled: isBooking !== null, className: "w-full py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2" },
+              isBooking === w.id ? React.createElement(Loader2, { size: 16, className: "animate-spin" }) : React.createElement(CheckCircle, { size: 16 }), " Book Worker"
+            )
+          ))
+        ),
+        React.createElement('button', { onClick: () => setSelectedJob(null), className: "w-full py-3 text-slate-500 font-medium bg-slate-100 rounded-xl hover:bg-slate-200" }, "Close")
+      )
+    ),
+
+    scanJob && React.createElement('div', { className: "fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm" },
+      React.createElement('div', { className: "bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl relative" },
+        React.createElement('button', { onClick: () => setScanJob(null), className: "absolute right-4 top-4 text-slate-400 hover:text-slate-600" }, React.createElement(X, { size: 20 })),
+        React.createElement('div', { className: "text-center mb-6" },
+          React.createElement('div', { className: "w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600 animate-pulse" }, React.createElement(QrCode, { size: 32 })),
+          React.createElement('h3', { className: "text-xl font-bold text-slate-800" }, "Scan Worker's QR"),
+          React.createElement('p', { className: "text-sm text-slate-500 mt-1" }, `Ask ${scanJob.assignedWorkerName} to show their completion QR code to verify.`)
+        ),
+        React.createElement('div', { className: "bg-black rounded-lg h-48 mb-4 flex items-center justify-center relative overflow-hidden" },
+          React.createElement('div', { className: "absolute inset-0 border-2 border-green-500 opacity-50 m-8 rounded-lg animate-pulse" }),
+          React.createElement('p', { className: "text-white/50 text-xs" }, "Camera Simulator Active")
+        ),
+        React.createElement('div', { className: "space-y-4" },
+          React.createElement('div', null,
+            React.createElement('label', { className: "text-xs font-bold text-slate-500 uppercase" }, "Or Enter Code Manually"),
+            React.createElement('input', { type: "text", value: qrInput, onChange: e => setQrInput(e.target.value.toUpperCase()), placeholder: "e.g. A1B2", className: "w-full p-3 text-center text-2xl font-mono tracking-widest border border-slate-300 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 uppercase", maxLength: 6 })
+          ),
+          React.createElement('button', { onClick: handleVerifyPayment, disabled: isProcessingPayment || qrInput.length < 4, className: "w-full py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2" },
+            isProcessingPayment ? React.createElement(Loader2, { className: "animate-spin" }) : React.createElement(Banknote, { size: 20 }), " Verify & Complete Job"
+          )
+        )
+      )
+    ),
+
+    jobToRate && React.createElement('div', { className: "fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 animate-fade-in" },
+      React.createElement('div', { className: "bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl" },
+        React.createElement('div', { className: "text-center mb-4" },
+          React.createElement('div', { className: "w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3 text-yellow-600" }, React.createElement(Star, { size: 24, fill: "currentColor" })),
+          React.createElement('h3', { className: "text-lg font-bold text-slate-800" }, `Rate ${jobToRate.assignedWorkerName}`),
+          React.createElement('p', { className: "text-sm text-slate-500" }, "How was your experience?")
+        ),
+        React.createElement('div', { className: "flex justify-center gap-2 mb-6" },
+          [1,2,3,4,5].map(star => React.createElement('button', { key: star, onClick: () => setRatingStars(star), className: `p-1 transition-transform hover:scale-110 ${ratingStars >= star ? 'text-yellow-400' : 'text-slate-200'}` },
+            React.createElement(Star, { size: 32, fill: "currentColor" })
+          ))
+        ),
+        React.createElement('textarea', { className: "w-full p-3 border border-slate-200 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none", placeholder: "Write a comment (optional)...", rows: 3, value: ratingComment, onChange: e => setRatingComment(e.target.value) }),
+        React.createElement('div', { className: "flex gap-2" },
+          React.createElement('button', { onClick: () => setJobToRate(null), className: "flex-1 py-3 text-slate-500 font-medium hover:bg-slate-50 rounded-lg" }, "Skip"),
+          React.createElement('button', { onClick: async () => { if (!jobToRate || ratingStars === 0) return; setIsSubmittingRating(true); try { await api.rateWorker(jobToRate.id, { stars: ratingStars, comment: ratingComment }); setJobToRate(null); fetchMyJobs(); } catch { showToast("Failed to submit rating"); } finally { setIsSubmittingRating(false); } }, disabled: ratingStars === 0 || isSubmittingRating, className: "flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50" },
+            isSubmittingRating ? 'Submitting...' : 'Submit Review'
+          )
+        )
+      )
+    ),
+
+    showAddFunds && React.createElement('div', { className: "fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" },
+      React.createElement('div', { className: "bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl" },
+        React.createElement('div', { className: "flex justify-between items-center mb-6" },
+          React.createElement('h3', { className: "text-xl font-bold text-slate-800" }, "Add Funds"),
+          React.createElement('button', { onClick: () => setShowAddFunds(false), className: "text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full" }, React.createElement(X, { size: 20 }))
+        ),
+        React.createElement('div', { className: "mb-6" },
+          React.createElement('label', { className: "block text-sm font-medium text-slate-700 mb-2" }, "Amount (₹)"),
+          React.createElement('input', { type: "number", value: addFundsAmount, onChange: e => setAddFundsAmount(e.target.value), className: "w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-lg font-bold", placeholder: "Enter amount" })
+        ),
+        React.createElement('button', { onClick: async () => { const amount = parseInt(addFundsAmount); if (!isNaN(amount) && amount > 0) { await api.addFunds(amount); refreshUser(); showToast(`₹${amount} added to wallet!`); setShowAddFunds(false); } else { showToast("Please enter a valid amount."); } }, className: "w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-lg shadow-lg hover:bg-indigo-700" }, `Add ₹${addFundsAmount || '0'}`)
+      )
+    ),
+
+    toastMessage && React.createElement('div', { className: "fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl z-[100] animate-fade-in-up flex items-center gap-2 text-sm font-medium" },
+      React.createElement(CheckCircle, { size: 16, className: "text-emerald-400" }), toastMessage
+    )
+  );
+}
+
+// ============================================================
+// WORKER DASHBOARD
+// ============================================================
+function WorkerDashboard() {
+  const { user, refreshUser, requestNotificationPermission } = useApp();
+  const [activeTab, setActiveTab] = useState('find');
+  const [availableJobs, setAvailableJobs] = useState([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [translations, setTranslations] = useState({});
+  const [translating, setTranslating] = useState({});
+  const [playingAudio, setPlayingAudio] = useState({});
+  const [activeChatJob, setActiveChatJob] = useState(null);
+  const [showQRJob, setShowQRJob] = useState(null);
+  const [editName, setEditName] = useState(user?.name || '');
+  const [editBio, setEditBio] = useState(user?.workerProfile?.bio || '');
+  const [selectedCats, setSelectedCats] = useState(user?.workerProfile?.categories || []);
+  const [editLocation, setEditLocation] = useState(user?.location || '');
+  const [editCoords, setEditCoords] = useState(user?.coords);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const notificationsEnabled = user?.notificationsEnabled ?? user?.workerProfile?.notificationsEnabled ?? false;
+  const showToast = (msg) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3000); };
+
+  const loadJobs = async () => {
+    if (!user) return;
+    setIsRefreshing(true);
+    const jobs = await api.getJobs({ type: 'worker', userId: user.id });
+    setAvailableJobs(jobs);
+    const counts = await api.getUnreadCounts(user.id);
+    setUnreadCounts(counts);
+    setIsRefreshing(false);
+  };
+
+  useEffect(() => { if (user && activeTab === 'find') loadJobs(); }, [user, activeTab]);
+
+  const toggleNotifications = async () => {
+    const newState = !notificationsEnabled;
+    if (newState) {
+      if (Notification.permission === 'default') await requestNotificationPermission();
+      else if (Notification.permission === 'denied') { showToast("Notifications are blocked. Please enable them in your browser settings."); return; }
+    }
+    try {
+      await api.updateUser({ notificationsEnabled: newState, workerProfile: user?.workerProfile ? { ...user.workerProfile, notificationsEnabled: newState } : undefined });
+      refreshUser();
+    } catch (error) { console.error("Failed to update notification settings", error); }
+  };
+
+  const handleSaveProfile = async () => {
+    await api.updateUser({
+      name: editName, location: editLocation, coords: editCoords,
+      workerProfile: { categories: selectedCats, bio: editBio, experienceYears: 3, availability: true, personalSchedule: user?.workerProfile?.personalSchedule || [], notificationsEnabled, rating: user?.workerProfile?.rating, ratingCount: user?.workerProfile?.ratingCount }
+    });
+    refreshUser(); showToast('Profile Updated!');
+  };
+
+  const handleExpressInterest = async (jobId) => {
+    if (!user) return;
+    await api.expressInterest(jobId, user.id);
+    loadJobs();
+  };
+
+  const handleTranslateJob = async (jobId, text) => {
+    const targetLang = user?.language || 'en';
+    setTranslating(prev => ({ ...prev, [jobId]: true }));
+    try {
+      const translated = await translateText(text, targetLang);
+      setTranslations(prev => ({ ...prev, [jobId]: translated || "Translation unavailable." }));
+    } catch { setTranslations(prev => ({ ...prev, [jobId]: "Translation service currently unavailable." })); }
+    finally { setTranslating(prev => ({ ...prev, [jobId]: false })); }
+  };
+
+  const handleListenToJob = async (jobId, text) => {
+    if (playingAudio[jobId]) return;
+    setPlayingAudio(prev => ({ ...prev, [jobId]: true }));
+    try {
+      let textToSpeak = text;
+      const currentTrans = translations[jobId];
+      if (currentTrans && !currentTrans.includes("unavailable") && !currentTrans.includes("failed")) textToSpeak = currentTrans;
+      const base64Audio = await generateSpeech(textToSpeak);
+      if (base64Audio) await playRawAudio(base64Audio);
+    } catch { }
+    finally { setPlayingAudio(prev => ({ ...prev, [jobId]: false })); }
+  };
+
+  const getLanguageName = (code) => SUPPORTED_LANGUAGES.find(l => l.code === code)?.name || 'Language';
+
+  if (!user?.workerProfile && activeTab === 'find') return React.createElement('div', { className: "p-6 text-center" },
+    React.createElement(AlertCircle, { className: "w-12 h-12 text-yellow-500 mx-auto mb-4" }),
+    React.createElement('h2', { className: "text-xl font-bold mb-2" }, "Become a Worker"),
+    React.createElement('p', { className: "text-slate-600 mb-6" }, "You need to set up your worker profile before you can see jobs."),
+    React.createElement('button', { onClick: () => setActiveTab('profile'), className: "bg-indigo-600 text-white px-6 py-2 rounded-lg" }, "Create Profile")
+  );
+
+  return React.createElement('div', { className: "pb-20" },
+    showMap && React.createElement(LocationPicker, { initialLat: editCoords?.lat || user?.coords?.lat, initialLng: editCoords?.lng || user?.coords?.lng, onConfirm: (lat, lng) => { setEditCoords({ lat, lng }); setShowMap(false); }, onCancel: () => setShowMap(false) }),
+    showQRJob && React.createElement('div', { className: "fixed inset-0 bg-black/80 z-[2500] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm" },
+      React.createElement('div', { className: "bg-white w-full max-w-sm rounded-2xl p-6 relative shadow-2xl" },
+        React.createElement('button', { onClick: () => setShowQRJob(null), className: "absolute right-4 top-4 text-slate-400 hover:text-slate-600" }, React.createElement(X, { size: 20 })),
+        React.createElement('div', { className: "text-center mb-6" },
+          React.createElement('h3', { className: "text-xl font-bold text-slate-800" }, "Job Completion"),
+          React.createElement('p', { className: "text-sm text-slate-500" }, `Show this to ${showQRJob.clientName}`)
+        ),
+        React.createElement('div', { className: "bg-slate-100 p-8 rounded-xl flex items-center justify-center mb-6" },
+          React.createElement('img', { src: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${showQRJob.completionCode}`, alt: "Completion QR", className: "w-48 h-48 mix-blend-multiply" })
+        ),
+        React.createElement('div', { className: "bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-center" },
+          React.createElement('p', { className: "text-xs font-bold text-yellow-700 uppercase tracking-widest mb-1" }, "Manual Code"),
+          React.createElement('p', { className: "text-3xl font-mono font-bold text-slate-800 tracking-widest" }, showQRJob.completionCode)
+        ),
+        React.createElement('p', { className: "text-xs text-center text-slate-400 mt-4" }, `Asking client to scan this will release ₹${(showQRJob.budget * 0.8).toFixed(0)} to your wallet.`)
+      )
+    ),
+    activeChatJob && user && React.createElement(ChatInterface, { jobId: activeChatJob.id, currentUserId: user.id, otherUserName: activeChatJob.clientName || 'Client', onClose: () => { setActiveChatJob(null); loadJobs(); } }),
+
+    // Tabs
+    React.createElement('div', { className: "flex border-b border-slate-200 mb-6 overflow-x-auto" },
+      [['find','Find Work'],['wallet','Wallet'],['profile','My Profile']].map(([tab, label]) => React.createElement('button', { key: tab, onClick: () => setActiveTab(tab), className: `flex-1 py-3 text-sm font-medium whitespace-nowrap px-4 ${activeTab === tab ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500'}` }, label))
+    ),
+
+    activeTab === 'find' && React.createElement('div', { className: "space-y-4 animate-fade-in relative px-1" },
+      React.createElement('div', { className: "bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-2 flex items-center justify-between shadow-sm" },
+        React.createElement('div', { className: "flex items-center gap-3" },
+          React.createElement('div', { className: `p-2.5 rounded-xl ${notificationsEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}` },
+            notificationsEnabled ? React.createElement(BellRing, { size: 20, className: "animate-pulse" }) : React.createElement(BellOff, { size: 20 })
+          ),
+          React.createElement('div', null,
+            React.createElement('h4', { className: "font-bold text-slate-800 text-sm" }, "Job Alerts"),
+            React.createElement('p', { className: "text-[10px] text-slate-500 font-medium" }, "Get notified when new work is posted nearby")
+          )
+        ),
+        React.createElement('button', { onClick: toggleNotifications, className: `relative w-12 h-6 rounded-full transition-all duration-300 ${notificationsEnabled ? 'bg-indigo-600' : 'bg-slate-300'}` },
+          React.createElement('div', { className: `absolute top-1 w-4 h-4 bg-white rounded-full shadow-lg transition-transform duration-300 ${notificationsEnabled ? 'translate-x-7' : 'translate-x-1'}` })
+        )
+      ),
+      React.createElement('div', { className: "flex justify-between items-center mb-2 px-1" },
+        React.createElement('h3', { className: "font-bold text-slate-700" }, "Matching Jobs"),
+        React.createElement('button', { onClick: loadJobs, className: "p-1.5 bg-white border rounded-full text-slate-500" }, React.createElement(RefreshCw, { size: 14, className: isRefreshing ? "animate-spin" : "" }))
+      ),
+      availableJobs.length === 0 ? React.createElement('div', { className: "text-center py-10 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200" }, React.createElement(AlertCircle, { className: "mx-auto mb-2 opacity-20", size: 32 }), React.createElement('p', null, "No matching jobs found nearby.")) :
+      availableJobs.map(job => {
+        if (!job) return null;
+        const hasApplied = job.interestedWorkerIds.includes(user.id);
+        const isAssignedToMe = job.assignedWorkerId === user.id;
+        if (job.status === 'BOOKED' && !isAssignedToMe) return null;
+        return React.createElement('div', { key: job.id, className: `p-4 rounded-xl border shadow-sm ${isAssignedToMe ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}` },
+          React.createElement('div', { className: "flex justify-between items-start mb-2" },
+            React.createElement('h3', { className: "font-semibold text-slate-800 flex items-center gap-2" }, getCategoryIcon(job.category), React.createElement('div', null, job.category)),
+            React.createElement('div', { className: "flex flex-col items-end gap-1" },
+              React.createElement('span', { className: "text-xs text-slate-400" }, new Date(job.postedAt).toLocaleDateString()),
+              isAssignedToMe && React.createElement('span', { className: "text-xs font-bold text-emerald-600" }, `₹${job.budget}`)
+            )
+          ),
+          React.createElement('div', { className: "mb-3" },
+            React.createElement('div', { className: "flex justify-between items-start gap-3" },
+              React.createElement('p', { className: "text-sm text-slate-600 leading-relaxed line-clamp-2" }, job.description),
+              React.createElement('div', { className: "flex flex-col gap-2 shrink-0" },
+                React.createElement('button', { onClick: () => handleListenToJob(job.id, job.description), className: "p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100" }, React.createElement(Volume2, { size: 16 })),
+                React.createElement('button', { onClick: () => handleTranslateJob(job.id, job.description), disabled: translating[job.id], className: `p-2 rounded-lg border transition-all ${translating[job.id] ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}` },
+                  translating[job.id] ? React.createElement(Loader2, { size: 16, className: "animate-spin" }) : React.createElement(Languages, { size: 16 })
+                )
+              )
+            ),
+            translations[job.id] && React.createElement('div', { className: `mt-3 p-3 border rounded-lg text-sm animate-fade-in ${translations[job.id].includes('unavailable') ? 'bg-orange-50 border-orange-100 text-orange-800' : 'bg-indigo-50 border-indigo-100 text-indigo-800'}` },
+              React.createElement('div', { className: "flex items-center gap-1.5 mb-1.5 pb-1.5 border-b border-indigo-100/50" },
+                React.createElement(Sparkles, { size: 12, className: "text-indigo-500" }),
+                React.createElement('span', { className: "text-[10px] uppercase font-bold text-indigo-400" }, `Translated to ${getLanguageName(user?.language)}`)
+              ),
+              React.createElement('p', { className: "leading-relaxed" }, translations[job.id])
+            )
+          ),
+          !isAssignedToMe && React.createElement('div', { className: "flex items-center text-xs text-slate-400 mb-4" },
+            React.createElement(MapPin, { className: "w-3 h-3 mr-1" }), job.location,
+            React.createElement('span', { className: "mx-2" }, "•"),
+            React.createElement('span', { className: "font-bold text-slate-700" }, `₹${job.budget}`)
+          ),
+          isAssignedToMe ? React.createElement('div', { className: "mt-3 pt-3 border-t border-emerald-200" },
+            React.createElement('div', { className: "flex justify-between items-center mb-3" },
+              React.createElement('p', { className: "text-emerald-700 font-bold text-sm flex items-center gap-1" }, React.createElement(CheckCircle, { size: 14 }), " BOOKED FOR YOU"),
+              React.createElement('span', { className: "bg-yellow-50 text-yellow-700 text-[10px] font-bold px-2 py-1 rounded border border-yellow-200" }, "ESCROW SECURED")
+            ),
+            React.createElement('div', { className: "flex gap-2" },
+              React.createElement('button', { onClick: () => setShowQRJob(job), className: "flex-1 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-emerald-700" }, React.createElement(QrCode, { size: 16 }), " Finish & Get Paid"),
+              React.createElement('button', { onClick: () => setActiveChatJob(job), className: "px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-200 hover:bg-indigo-100" }, React.createElement(MessageCircle, { size: 18 }))
+            )
+          ) : React.createElement('button', { onClick: () => handleExpressInterest(job.id), disabled: hasApplied, className: `w-full py-2.5 rounded-lg text-sm font-bold transition-all ${hasApplied ? 'bg-slate-100 text-slate-400' : 'bg-emerald-600 text-white shadow-lg shadow-emerald-100'}` },
+            hasApplied ? 'Interest Sent' : 'I am Interested'
+          )
+        );
+      })
+    ),
+
+    activeTab === 'wallet' && React.createElement('div', { className: "space-y-6 animate-fade-in px-1" },
+      React.createElement('div', { className: "bg-gradient-to-br from-indigo-800 to-indigo-600 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden" },
+        React.createElement('div', { className: "absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" }),
+        React.createElement('div', { className: "relative z-10" },
+          React.createElement('p', { className: "text-indigo-200 text-sm font-medium mb-1" }, "Total Earnings Balance"),
+          React.createElement('h2', { className: "text-4xl font-bold mb-6" }, `₹${user?.walletBalance?.toFixed(2) || '0.00'}`),
+          React.createElement('button', { onClick: async () => {
+            if(!user?.walletBalance || user.walletBalance <= 0) return;
+            if(!user.paymentDetails?.upiId) { showToast("Please add UPI ID first."); return; }
+            try { await api.withdrawFunds(user.walletBalance); showToast("Withdrawal initiated!"); refreshUser(); }
+            catch(e) { showToast(e.message); }
+          }, className: "flex-1 bg-white text-indigo-700 py-2.5 px-4 rounded-xl font-bold text-sm hover:bg-indigo-50 flex items-center justify-center gap-2" },
+            React.createElement(ArrowUpRight, { size: 18 }), " Withdraw"
+          )
+        )
+      ),
+      React.createElement('div', { className: "bg-white rounded-xl border border-slate-200 p-4" },
+        React.createElement('h3', { className: "font-bold text-slate-800 mb-4 flex items-center gap-2" }, React.createElement(Wallet, { size: 18 }), " Payment Methods"),
+        React.createElement('label', { className: "block text-xs font-medium text-slate-500 mb-1" }, "Linked UPI ID"),
+        React.createElement('div', { className: "flex gap-2" },
+          React.createElement('input', { type: "text", placeholder: "user@upi", className: "flex-1 p-2 border border-slate-300 rounded-lg text-sm", defaultValue: user?.paymentDetails?.upiId, onBlur: e => { if(e.target.value && e.target.value !== user?.paymentDetails?.upiId) api.updatePaymentDetails({ upiId: e.target.value }).then(refreshUser); } }),
+          React.createElement('button', { className: "bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-xs font-bold border border-slate-200" }, "Update")
+        )
+      )
+    ),
+
+    activeTab === 'profile' && React.createElement('div', { className: "space-y-6 animate-fade-in p-1" },
+      React.createElement('div', { className: "bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-5 rounded-2xl shadow-lg relative overflow-hidden" },
+        React.createElement('div', { className: "absolute top-0 right-0 p-4 opacity-10" }, React.createElement(Star, { size: 120 })),
+        React.createElement('div', { className: "relative z-10" },
+          React.createElement('p', { className: "text-indigo-100 text-sm font-medium uppercase tracking-wider mb-2" }, "My Rating"),
+          React.createElement('div', { className: "flex items-end gap-3" },
+            React.createElement('h2', { className: "text-5xl font-bold" }, user?.workerProfile?.rating ? user.workerProfile.rating.toFixed(1) : 'New'),
+            React.createElement('div', { className: "flex mb-2" }, React.createElement(Star, { size: 20, fill: "gold", className: "text-yellow-400" }))
+          )
+        )
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { className: "block text-sm font-medium text-slate-700 mb-1" }, "Full Name"),
+        React.createElement('input', { type: "text", value: editName, onChange: e => setEditName(e.target.value), className: "w-full p-3 border border-slate-300 rounded-lg" })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { className: "block text-sm font-medium text-slate-700 mb-2" }, "Skills"),
+        React.createElement('div', { className: "flex flex-wrap gap-2" },
+          CATEGORIES_LIST.map(cat => React.createElement('button', { key: cat, onClick: () => setSelectedCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]), className: `px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${selectedCats.includes(cat) ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300 text-slate-600'}` }, cat))
+        )
+      ),
+      React.createElement('button', { onClick: handleSaveProfile, className: "w-full py-3 bg-emerald-600 text-white rounded-lg font-bold shadow-md shadow-emerald-200" }, "Save Profile")
+    ),
+
+    toastMessage && React.createElement('div', { className: "fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl z-[100] animate-fade-in-up flex items-center gap-2 text-sm font-medium" },
+      React.createElement(CheckCircle, { size: 16, className: "text-emerald-400" }), toastMessage
+    )
+  );
+}
+
+// ============================================================
+// ADMIN DASHBOARD
+// ============================================================
+function AdminDashboard() {
+  const { logout } = useApp();
+  const [activeTab, setActiveTab] = useState('workers');
+  const [workers, setWorkers] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState(null);
+  const showToast = (msg) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3000); };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      const [allWorkers, allClients] = await Promise.all([api.getAllWorkers(), api.getAllClients()]);
+      setWorkers(allWorkers); setClients(allClients); setIsLoading(false);
+    };
+    loadData();
+  }, []);
+
+  const handleVerify = async (userId, status) => {
+    const updateList = (list) => list.map(u => u.id === userId ? { ...u, isVerified: status } : u);
+    if (activeTab === 'workers') setWorkers(prev => updateList(prev));
+    else setClients(prev => updateList(prev));
+    try { await api.verifyUser(userId, status); }
+    catch { showToast("Failed to update status."); }
+  };
+
+  const renderUserList = (users, type) => {
+    if (users.length === 0) return React.createElement('div', { className: "p-10 bg-white rounded-xl border border-dashed border-slate-300 text-center text-slate-400" }, React.createElement('p', null, `No ${type}s found in the system.`));
+    return users.map(user => React.createElement('div', { key: user.id, className: "bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3" },
+      React.createElement('div', { className: "flex justify-between items-start" },
+        React.createElement('div', { className: "flex items-center gap-3" },
+          React.createElement('div', { className: `p-2.5 rounded-full ${type === 'worker' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}` }, React.createElement(UserIcon, { size: 20 })),
+          React.createElement('div', null,
+            React.createElement('h4', { className: "font-bold text-slate-800 text-sm" }, user.name || 'Unknown User'),
+            React.createElement('p', { className: "text-xs text-slate-500 font-medium" }, user.phone),
+            React.createElement('div', { className: "flex items-center gap-1 text-[10px] text-slate-400 mt-0.5" }, React.createElement(Mail, { size: 10 }), " ", user.email)
+          )
+        ),
+        React.createElement('span', { className: `text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide ${user.isVerified ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}` }, user.isVerified ? 'Verified' : 'Pending')
+      ),
+      React.createElement('div', { className: "flex items-center text-xs text-slate-500 bg-slate-50 p-2 rounded-lg" }, React.createElement(MapPin, { size: 12, className: "mr-1.5 text-slate-400" }), user.location || 'No location set'),
+      type === 'worker' && user.workerProfile && React.createElement('div', { className: "pt-2 border-t border-slate-100" },
+        React.createElement('div', { className: "flex gap-1 flex-wrap mb-2" },
+          user.workerProfile.categories.map(c => React.createElement('span', { key: c, className: "bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] px-2 py-0.5 rounded-full font-medium" }, c))
+        )
+      ),
+      React.createElement('div', { className: "mt-3 pt-3 border-t border-slate-100 flex gap-2" },
+        !user.isVerified ? React.createElement('button', { onClick: () => handleVerify(user.id, true), className: "flex-1 py-2 bg-emerald-600 text-white text-xs rounded-lg font-bold hover:bg-emerald-700 flex items-center justify-center gap-1" }, React.createElement(CheckCircle, { size: 14 }), " Approve") :
+        React.createElement('button', { onClick: () => handleVerify(user.id, false), className: "flex-1 py-2 bg-red-50 text-red-600 text-xs rounded-lg font-bold hover:bg-red-100 border border-red-100 flex items-center justify-center gap-1" }, React.createElement(X, { size: 14 }), " Revoke")
+      ),
+      React.createElement('div', { className: "text-[10px] text-slate-300 text-right" }, `ID: ${user.id}`)
+    ));
+  };
+
+  return React.createElement('div', { className: "animate-fade-in pb-20" },
+    React.createElement('div', { className: "flex items-center justify-between mb-6 bg-white p-4 rounded-xl border border-slate-100 shadow-sm" },
+      React.createElement('div', { className: "flex items-center gap-3" },
+        React.createElement('div', { className: "bg-indigo-600 p-2 rounded-lg text-white" }, React.createElement(Shield, { size: 24 })),
+        React.createElement('div', null, React.createElement('h2', { className: "text-xl font-bold text-slate-800" }, "Admin Console"), React.createElement('p', { className: "text-xs text-slate-500" }, "Manage users and platform activity"))
+      ),
+      React.createElement('button', { onClick: logout, className: "flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-red-50 hover:text-red-600 text-sm font-medium" }, React.createElement(LogOut, { size: 16 }), " Sign Out")
+    ),
+    React.createElement('div', { className: "flex border-b border-slate-200 mb-6 bg-white rounded-t-xl px-2 pt-2" },
+      React.createElement('button', { onClick: () => setActiveTab('workers'), className: `flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 relative top-[1px] ${activeTab === 'workers' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-400'}` },
+        React.createElement(Hammer, { size: 16 }), " Workers ", !isLoading && React.createElement('span', { className: "text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-600" }, workers.length)
+      ),
+      React.createElement('button', { onClick: () => setActiveTab('clients'), className: `flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 relative top-[1px] ${activeTab === 'clients' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-400'}` },
+        React.createElement(Briefcase, { size: 16 }), " Clients ", !isLoading && React.createElement('span', { className: "text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-600" }, clients.length)
+      )
+    ),
+    React.createElement('div', { className: "space-y-4" },
+      isLoading ? React.createElement('div', { className: "flex flex-col items-center justify-center py-20 text-slate-400" }, React.createElement(Loader2, { size: 32, className: "animate-spin mb-2 text-indigo-500" }), React.createElement('p', { className: "text-sm" }, "Fetching users...")) :
+      activeTab === 'workers' ? renderUserList(workers, 'worker') : renderUserList(clients, 'client')
+    ),
+    toastMessage && React.createElement('div', { className: "fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl z-[100] animate-fade-in-up flex items-center gap-2 text-sm font-medium" },
+      React.createElement(CheckCircle, { size: 16, className: "text-emerald-400" }), toastMessage
+    )
+  );
+}
+
+// ============================================================
+// PROFILE SETTINGS
+// ============================================================
+function ProfileSettings() {
+  const { user, updateUserProfile, requestNotificationPermission, refreshUser } = useApp();
+  const [isEditing, setIsEditing] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const fileInputRef = useRef(null);
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [location, setLocation] = useState(user?.location || '');
+  const [password, setPassword] = useState(user?.password || '');
+  const [language, setLanguage] = useState(user?.language || 'en');
+  const [coords, setCoords] = useState(user?.coords);
+  const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(user?.notificationsEnabled ?? user?.workerProfile?.notificationsEnabled ?? false);
+  const [upiId, setUpiId] = useState(user?.paymentDetails?.upiId || '');
+  const [bankAccount, setBankAccount] = useState(user?.paymentDetails?.bankAccount || '');
+  const [ifsc, setIfsc] = useState(user?.paymentDetails?.ifsc || '');
+  const [isEditingPayment, setIsEditingPayment] = useState(false);
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [showAddFunds, setShowAddFunds] = useState(false);
+  const [addFundsAmount, setAddFundsAmount] = useState('1000');
+
+  const showToast = (msg) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3000); };
+
+  useEffect(() => {
+    if (user) {
+      setName(user.name || ''); setEmail(user.email || ''); setPhone(user.phone || '');
+      setLocation(user.location || ''); setPassword(user.password || ''); setLanguage(user.language || 'en');
+      setCoords(user.coords); setProfilePicture(user.profilePicture || '');
+      setNotificationsEnabled(user.notificationsEnabled ?? user.workerProfile?.notificationsEnabled ?? false);
+      setUpiId(user.paymentDetails?.upiId || ''); setBankAccount(user.paymentDetails?.bankAccount || ''); setIfsc(user.paymentDetails?.ifsc || '');
+    }
+  }, [user]);
+
+  if (!user) return null;
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    const updatedWorkerProfile = user.role === 'worker' && user.workerProfile ? { ...user.workerProfile, notificationsEnabled } : user.workerProfile;
+    await updateUserProfile({ name, email, phone, location, password, language, coords, profilePicture, notificationsEnabled, workerProfile: updatedWorkerProfile });
+    setIsEditing(false); showToast('Settings updated successfully!');
+  };
+
+  const handleSavePayment = async () => {
+    setIsSavingPayment(true);
+    try { await api.updatePaymentDetails({ upiId, bankAccount, ifsc }); refreshUser(); setIsEditingPayment(false); }
+    catch { showToast("Failed to save payment details"); }
+    finally { setIsSavingPayment(false); }
+  };
+
+  const handleLocationSelect = async (lat, lng) => {
+    setCoords({ lat, lng }); setShowMap(false);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const data = await response.json();
+      setLocation(data.address?.city || data.address?.town || data.display_name.split(',')[0]);
+    } catch { setLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`); }
+  };
+
+  const handleSearchLocation = async () => {
+    if (location && location.trim().length > 0) {
+      setIsSearching(true);
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`);
+        const data = await response.json();
+        if (data && data.length > 0) setCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+        else showToast("Location not found.");
+      } catch { console.error("Geocoding failed"); }
+      finally { setIsSearching(false); }
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 4 * 1024 * 1024) { showToast("Image size is too large. Please choose an image under 4MB."); return; }
+      const reader = new FileReader();
+      reader.onloadend = () => { setProfilePicture(reader.result); setIsEditing(true); };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return React.createElement('div', { className: "animate-fade-in pb-20" },
+    showMap && React.createElement(LocationPicker, { initialLat: coords?.lat || user.coords?.lat, initialLng: coords?.lng || user.coords?.lng, onConfirm: handleLocationSelect, onCancel: () => setShowMap(false) }),
+    React.createElement('div', { className: "bg-indigo-600 pb-16 pt-6 px-4 rounded-b-3xl -mx-4 mb-4 shadow-lg text-white" },
+      React.createElement('div', { className: "flex flex-col items-center" },
+        React.createElement('div', { className: "relative" },
+          React.createElement('div', { className: "w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-4xl font-bold backdrop-blur-sm border-4 border-white/10 mb-3 overflow-hidden" },
+            profilePicture ? React.createElement('img', { src: profilePicture, alt: "Profile", className: "w-full h-full object-cover" }) : user.name.charAt(0).toUpperCase()
+          ),
+          React.createElement('button', { type: "button", onClick: () => fileInputRef.current?.click(), className: "absolute bottom-2 right-0 bg-white text-indigo-600 p-1.5 rounded-full shadow-lg" }, React.createElement(Camera, { size: 16 })),
+          React.createElement('input', { type: "file", ref: fileInputRef, className: "hidden", accept: "image/*", onChange: handleImageUpload })
+        ),
+        React.createElement('div', { className: "flex items-center gap-2" },
+          React.createElement('h2', { className: "text-xl font-bold" }, user.name),
+          user.isVerified && React.createElement(ShieldCheck, { size: 18, className: "text-emerald-300" })
+        ),
+        React.createElement('p', { className: "text-indigo-100 text-sm" }, user.role.toUpperCase()),
+        React.createElement('div', { className: "mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center justify-between w-full max-w-[200px] border border-white/20" },
+          React.createElement('div', { className: "flex items-center gap-2" }, React.createElement(Wallet, { size: 16, className: "text-indigo-200" }), React.createElement('span', { className: "text-xs font-medium text-indigo-100" }, "Balance")),
+          React.createElement('div', { className: "flex items-center gap-2" },
+            React.createElement('span', { className: "font-bold" }, `₹${user.walletBalance?.toFixed(0) || 0}`),
+            React.createElement('button', { onClick: () => setShowAddFunds(true), className: "bg-white text-indigo-600 p-1 rounded-full hover:bg-indigo-50" }, React.createElement(Plus, { size: 12 }))
+          )
+        )
+      )
+    ),
+    React.createElement('div', { className: "px-4 -mt-10 space-y-4" },
+      React.createElement('form', { onSubmit: handleSave, className: "bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-5" },
+        React.createElement('div', { className: "flex justify-between items-center mb-2" },
+          React.createElement('h3', { className: "font-bold text-slate-800" }, "Account Settings"),
+          React.createElement('button', { type: "button", onClick: () => setIsEditing(!isEditing), className: "text-sm text-indigo-600 font-medium hover:text-indigo-800" }, isEditing ? 'Cancel' : 'Edit')
+        ),
+        React.createElement('div', { className: "bg-slate-50 p-3 rounded-lg flex items-center justify-between" },
+          React.createElement('div', { className: "flex items-center gap-2" }, React.createElement(CreditCard, { size: 18, className: "text-slate-400" }), React.createElement('span', { className: "text-xs font-bold text-slate-500 uppercase" }, "KYC Status")),
+          React.createElement('span', { className: `text-xs font-bold px-2 py-1 rounded-full uppercase ${user.kycStatus === 'VERIFIED' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}` }, user.kycStatus || 'NOT SUBMITTED')
+        ),
+        React.createElement('div', { className: "space-y-4" },
+          [
+            { label: "App Language", icon: Languages, isSelect: true },
+            { label: "Full Name", icon: User, field: 'name', value: name, set: setName },
+            { label: "Email Address", icon: Mail, field: 'email', type: 'email', value: email, set: setEmail },
+            { label: "Phone Number", icon: Phone, field: 'phone', type: 'tel', value: phone, set: setPhone },
+          ].map((item, idx) => {
+            if (item.isSelect) return React.createElement('div', { key: idx, className: "group" },
+              React.createElement('label', { className: "block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider" }, item.label),
+              React.createElement('div', { className: "flex items-center gap-3 p-3 bg-slate-50 rounded-lg" },
+                React.createElement(Languages, { className: "w-5 h-5 text-slate-400" }),
+                React.createElement('select', { disabled: !isEditing, value: language, onChange: e => setLanguage(e.target.value), className: "bg-transparent w-full outline-none text-slate-700 disabled:text-slate-500" },
+                  SUPPORTED_LANGUAGES.map(lang => React.createElement('option', { key: lang.code, value: lang.code }, lang.name))
+                )
+              )
+            );
+            const IconComp = item.icon;
+            return React.createElement('div', { key: idx, className: "group" },
+              React.createElement('label', { className: "block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider" }, item.label),
+              React.createElement('div', { className: "flex items-center gap-3 p-3 bg-slate-50 rounded-lg" },
+                React.createElement(IconComp, { className: "w-5 h-5 text-slate-400" }),
+                React.createElement('input', { type: item.type || 'text', disabled: !isEditing, value: item.value, onChange: e => item.set(e.target.value), className: "bg-transparent w-full outline-none text-slate-700 disabled:text-slate-500" })
+              )
+            );
+          }),
+          React.createElement('div', { className: "group" },
+            React.createElement('label', { className: "block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider" }, "Default Location"),
+            React.createElement('div', { className: "flex items-center gap-2" },
+              React.createElement('div', { className: "flex-1 flex items-center gap-3 p-3 bg-slate-50 rounded-lg" },
+                React.createElement(MapPin, { className: "w-5 h-5 text-slate-400 shrink-0" }),
+                React.createElement('input', { type: "text", disabled: !isEditing, value: location, onChange: e => setLocation(e.target.value), placeholder: "Enter City or Pincode", className: "bg-transparent w-full outline-none text-slate-700 disabled:text-slate-500", onKeyDown: e => { if(e.key === 'Enter' && isEditing) { e.preventDefault(); handleSearchLocation(); } } })
+              ),
+              isEditing && React.createElement('button', { type: "button", onClick: handleSearchLocation, disabled: isSearching || !location, className: "p-3 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-200 shrink-0" },
+                isSearching ? React.createElement(Loader2, { size: 20, className: "animate-spin" }) : React.createElement(Search, { size: 20 })
+              ),
+              isEditing && React.createElement('button', { type: "button", onClick: () => setShowMap(true), className: "p-3 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-200 shrink-0" }, React.createElement(MapIcon, { size: 20 }))
+            )
+          ),
+          React.createElement('div', { className: "group" },
+            React.createElement('label', { className: "block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider" }, "Password"),
+            React.createElement('div', { className: "flex items-center gap-3 p-3 bg-slate-50 rounded-lg" },
+              React.createElement(Lock, { className: "w-5 h-5 text-slate-400" }),
+              React.createElement('input', { type: isEditing ? "text" : "password", disabled: !isEditing, value: password, onChange: e => setPassword(e.target.value), className: "bg-transparent w-full outline-none text-slate-700 disabled:text-slate-500" })
+            )
+          )
+        ),
+        isEditing && React.createElement('button', { type: "submit", className: "w-full flex justify-center items-center py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all" },
+          React.createElement(Save, { className: "w-4 h-4 mr-2" }), " Save Changes"
+        )
+      ),
+      React.createElement('div', { className: "bg-white rounded-2xl shadow-sm border border-slate-100 p-6" },
+        React.createElement('div', { className: "flex justify-between items-center mb-4" },
+          React.createElement('h3', { className: "font-bold text-slate-800" }, "Payment Methods"),
+          !isEditingPayment ? React.createElement('button', { onClick: () => setIsEditingPayment(true), className: "text-indigo-600 text-sm font-bold flex items-center gap-1 hover:bg-indigo-50 px-3 py-1.5 rounded-lg" }, bankAccount || upiId ? 'Edit' : 'Add New') :
+          React.createElement('button', { onClick: () => setIsEditingPayment(false), className: "text-slate-400 text-sm font-medium hover:text-slate-600" }, "Cancel")
+        ),
+        isEditingPayment ? React.createElement('div', { className: "space-y-4 animate-fade-in" },
+          React.createElement('div', { className: "border border-indigo-100 rounded-xl p-4 bg-indigo-50/50" },
+            React.createElement('h4', { className: "flex items-center gap-2 font-bold text-sm text-indigo-800 mb-3" }, React.createElement(Landmark, { size: 16 }), " Bank Details"),
+            React.createElement('div', { className: "space-y-3" },
+              React.createElement('input', { type: "text", value: bankAccount, onChange: e => setBankAccount(e.target.value.replace(/\D/g, '')), placeholder: "Enter Account Number", className: "w-full p-3 bg-white border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" }),
+              React.createElement('input', { type: "text", value: ifsc, onChange: e => setIfsc(e.target.value.toUpperCase()), placeholder: "e.g. SBIN0001234", className: "w-full p-3 bg-white border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none uppercase", maxLength: 11 })
+            )
+          ),
+          React.createElement('div', { className: "border border-indigo-100 rounded-xl p-4 bg-indigo-50/50" },
+            React.createElement('h4', { className: "flex items-center gap-2 font-bold text-sm text-indigo-800 mb-3" }, React.createElement(Wallet, { size: 16 }), " UPI VPA"),
+            React.createElement('input', { type: "text", value: upiId, onChange: e => setUpiId(e.target.value), placeholder: "e.g. user@okaxis", className: "w-full p-3 bg-white border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" })
+          ),
+          React.createElement('button', { onClick: handleSavePayment, disabled: isSavingPayment, className: "w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2" },
+            isSavingPayment ? React.createElement(Loader2, { size: 18, className: "animate-spin" }) : React.createElement(Save, { size: 18 }), " Verify & Save Details"
+          )
+        ) : React.createElement('div', { className: "space-y-3" },
+          React.createElement('div', { className: `flex items-center p-4 rounded-xl border ${bankAccount ? 'border-indigo-200 bg-white' : 'border-dashed border-slate-200 bg-slate-50'}` },
+            React.createElement('div', { className: `w-10 h-10 rounded-full flex items-center justify-center mr-4 ${bankAccount ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-400'}` }, React.createElement(Landmark, { size: 20 })),
+            bankAccount ? React.createElement('div', null, React.createElement('p', { className: "font-bold text-slate-800 text-sm" }, "Bank Account"), React.createElement('p', { className: "text-xs text-slate-500 font-mono mt-0.5" }, `•••• ${bankAccount.slice(-4)} | ${ifsc}`)) :
+            React.createElement('p', { className: "text-sm text-slate-500 font-medium" }, "No Bank Account Linked")
+          ),
+          React.createElement('div', { className: `flex items-center p-4 rounded-xl border ${upiId ? 'border-purple-200 bg-white' : 'border-dashed border-slate-200 bg-slate-50'}` },
+            React.createElement('div', { className: `w-10 h-10 rounded-full flex items-center justify-center mr-4 ${upiId ? 'bg-purple-100 text-purple-600' : 'bg-slate-200 text-slate-400'}` }, React.createElement(Wallet, { size: 20 })),
+            upiId ? React.createElement('div', null, React.createElement('p', { className: "font-bold text-slate-800 text-sm" }, "UPI ID"), React.createElement('p', { className: "text-xs text-slate-500 mt-0.5" }, upiId)) :
+            React.createElement('p', { className: "text-sm text-slate-500 font-medium" }, "No UPI ID Linked")
+          )
+        ),
+        React.createElement('div', { className: "mt-4 flex items-center justify-center gap-2 text-[10px] text-slate-400 bg-slate-50 p-2 rounded-lg" },
+          React.createElement(ShieldCheck, { size: 12, className: "text-green-500" }), " 100% Secure Payments • PCI-DSS Compliant"
+        )
+      ),
+      React.createElement('div', { className: "mt-6 text-center text-xs text-slate-400" },
+        React.createElement('p', null, `Member since ${new Date().getFullYear()}`),
+        React.createElement('p', { className: "mt-1" }, "Version 1.0.4")
+      )
+    ),
+    showAddFunds && React.createElement('div', { className: "fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" },
+      React.createElement('div', { className: "bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl" },
+        React.createElement('div', { className: "flex justify-between items-center mb-6" },
+          React.createElement('h3', { className: "text-xl font-bold text-slate-800" }, "Add Funds"),
+          React.createElement('button', { onClick: () => setShowAddFunds(false), className: "text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full" }, React.createElement(X, { size: 20 }))
+        ),
+        React.createElement('input', { type: "number", value: addFundsAmount, onChange: e => setAddFundsAmount(e.target.value), className: "w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-lg font-bold mb-6", placeholder: "Enter amount" }),
+        React.createElement('button', { onClick: async () => { const amount = parseInt(addFundsAmount); if (!isNaN(amount) && amount > 0) { await api.addFunds(amount); refreshUser(); showToast(`₹${amount} added to wallet!`); setShowAddFunds(false); } }, className: "w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-lg shadow-lg hover:bg-indigo-700" }, `Add ₹${addFundsAmount || '0'}`)
+      )
+    ),
+    toastMessage && React.createElement('div', { className: "fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl z-[100] animate-fade-in-up flex items-center gap-2 text-sm font-medium" },
+      React.createElement(CheckCircle, { size: 16, className: "text-emerald-400" }), toastMessage
+    )
+  );
+}
+
+// ============================================================
+// APP CONTENT & APP ROOT
+// ============================================================
+function AppContent() {
+  const { user, isLoading, currentView } = useApp();
+
+  if (isLoading) return React.createElement('div', { className: "min-h-screen flex items-center justify-center bg-slate-50" }, React.createElement(Loader2, { className: "w-8 h-8 text-indigo-600 animate-spin" }));
+  if (!user) return React.createElement(Login, null);
+
+  let content;
+  if (currentView === 'settings') content = React.createElement(ProfileSettings, null);
+  else if (!user.roleSelected) content = React.createElement(RoleSelector, null);
+  else if (user.role === 'client') content = React.createElement(ClientDashboard, null);
+  else if (user.role === 'worker') content = React.createElement(WorkerDashboard, null);
+  else if (user.role === 'admin') content = React.createElement(AdminDashboard, null);
+  else content = React.createElement(RoleSelector, null);
+
+  return React.createElement(Layout, null, React.createElement('div', { className: "space-y-6" }, content));
+}
+
+function App() {
+  return React.createElement(AppProvider, null, React.createElement(AppContent, null));
+}
+
+// ============================================================
+// MOUNT
+// ============================================================
+const rootElement = document.getElementById('root');
+createRoot(rootElement).render(React.createElement(App, null));
+  </script>
+</body>
+</html>
